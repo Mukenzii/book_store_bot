@@ -20,8 +20,9 @@ services:
       - "127.0.0.1:${DB_EXTERNAL_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Creates the schema the first time the DB volume is initialised.
-      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # NB: schema is created by the app (SQLAlchemy models via init_db /
+      # create_all) — the single source of truth. We deliberately do NOT mount
+      # sql/init.sql here so the DB schema can never drift from the models.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-books} -d ${DB_NAME:-books_store}"]
       interval: 5s
