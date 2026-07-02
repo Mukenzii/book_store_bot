@@ -1,3 +1,5 @@
+import re
+
 from aiogram import F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -8,20 +10,31 @@ from bot.filters import IsAdmin
 from bot.formatting import format_store_admin
 from bot.keyboards import (
     PAGE_SIZE,
+    WEEKDAY_NAMES,
     AdminField,
     AdminMenu,
     AdminPage,
     AdminStore,
     BroadcastCB,
+    SchedDay,
+    SchedMenu,
+    SchedPick,
+    SchedPost,
     admin_confirm_delete_kb,
     admin_list_kb,
     admin_menu_kb,
     admin_store_kb,
     broadcast_confirm_kb,
+    schedule_days_kb,
+    schedule_menu_kb,
+    schedule_pick_day_kb,
+    scheduled_confirm_delete_kb,
+    scheduled_list_kb,
+    scheduled_post_kb,
     send_location_kb,
 )
 from bot import repository as repo
-from bot.states import AddStore, Broadcast, EditStore
+from bot.states import AddPost, AddStore, Broadcast, EditStore
 
 # Every handler here is gated to admins for both messages and callbacks.
 router = Router()
@@ -121,6 +134,10 @@ async def on_menu(callback: CallbackQuery, callback_data: AdminMenu, state: FSMC
             "Bekor qilish uchun /cancel.",
             reply_markup=ReplyKeyboardRemove(),
         )
+        return
+    if callback_data.action == "schedule":
+        await state.clear()
+        await callback.message.answer(await _schedule_menu_text(), reply_markup=schedule_menu_kb())
 
 
 @router.callback_query(AdminPage.filter())
@@ -308,3 +325,165 @@ async def broadcast_send(callback: CallbackQuery, state: FSMContext) -> None:
         f"👥 Jami: <b>{result.total}</b>"
     )
     await callback.message.answer(await _menu_text(), reply_markup=admin_menu_kb())
+
+
+# --- scheduled weekly posts --------------------------------------------------
+
+async def _schedule_menu_text() -> str:
+    days = await repo.get_enabled_weekdays()
+    day_str = ", ".join(WEEKDAY_NAMES[d] for d in sorted(days)) if days else "hali tanlanmagan"
+    count = await repo.count_scheduled_posts()
+    return (
+        "📅 <b>Rejalashtirilgan postlar</b>\n"
+        f"🗓 Faol kunlar: <b>{day_str}</b>\n"
+        f"📋 Postlar soni: <b>{count}</b>"
+    )
+
+
+def _parse_hhmm(raw: str) -> str | None:
+    m = re.match(r"^\s*(\d{1,2}):(\d{2})\s*$", raw or "")
+    if not m:
+        return None
+    hour, minute = int(m.group(1)), int(m.group(2))
+    if 0 <= hour <= 23 and 0 <= minute <= 59:
+        return f"{hour:02d}:{minute:02d}"
+    return None
+
+
+def _post_text(post) -> str:
+    last = post.last_sent_on.isoformat() if post.last_sent_on else "hali yuborilmagan"
+    return (
+        f"📅 <b>Rejalashtirilgan post #{post.id}</b>\n"
+        f"🗓 Kun: <b>{WEEKDAY_NAMES[post.weekday]}</b>\n"
+        f"🕒 Vaqt: <b>{post.send_time}</b>\n"
+        f"📝 Matn: {post.preview or '—'}\n"
+        f"📤 Oxirgi yuborilgan: {last}"
+    )
+
+
+@router.callback_query(SchedMenu.filter())
+async def on_sched_menu(callback: CallbackQuery, callback_data: SchedMenu, state: FSMContext) -> None:
+    await callback.answer()
+    action = callback_data.action
+
+    if action == "menu":
+        await state.clear()
+        await callback.message.answer(await _schedule_menu_text(), reply_markup=schedule_menu_kb())
+        return
+
+    if action == "days":
+        days = await repo.get_enabled_weekdays()
+        await callback.message.answer(
+            "🗓 Post yuboriladigan kunlarni tanlang (bosib yoqing / o‘chiring):",
+            reply_markup=schedule_days_kb(days),
+        )
+        return
+
+    if action == "list":
+        posts = await repo.list_scheduled_posts()
+        if not posts:
+            await callback.message.answer("Hozircha rejalashtirilgan post yo‘q.", reply_markup=schedule_menu_kb())
+            return
+        await callback.message.answer("📋 Rejalashtirilgan postlar:", reply_markup=scheduled_list_kb(posts))
+        return
+
+    if action == "add":
+        days = await repo.get_enabled_weekdays()
+        if not days:
+            await callback.message.answer(
+                "Avval «🗓 Kunlarni tanlash» orqali kamida bitta kun tanlang.",
+                reply_markup=schedule_menu_kb(),
+            )
+            return
+        await state.clear()
+        await callback.message.answer(
+            "Qaysi kunga post rejalashtiramiz?",
+            reply_markup=schedule_pick_day_kb(days),
+        )
+
+
+@router.callback_query(SchedDay.filter())
+async def on_sched_day_toggle(callback: CallbackQuery, callback_data: SchedDay) -> None:
+    days = await repo.toggle_weekday(callback_data.weekday)
+    on = callback_data.weekday in days
+    await callback.answer(f"{WEEKDAY_NAMES[callback_data.weekday]}: {'yoqildi' if on else 'o‘chirildi'}")
+    try:
+        await callback.message.edit_reply_markup(reply_markup=schedule_days_kb(days))
+    except Exception:  # noqa: BLE001 — markup unchanged/expired is harmless
+        pass
+
+
+@router.callback_query(SchedPick.filter())
+async def on_sched_pick_day(callback: CallbackQuery, callback_data: SchedPick, state: FSMContext) -> None:
+    await callback.answer()
+    await state.set_state(AddPost.time)
+    await state.update_data(weekday=callback_data.weekday)
+    await callback.message.answer(
+        f"🕒 <b>{WEEKDAY_NAMES[callback_data.weekday]}</b> kuni post nechida yuborilsin?\n"
+        "Vaqtni <b>HH:MM</b> ko‘rinishida kiriting (masalan: 09:30).",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+@router.message(AddPost.time, F.text)
+async def on_sched_time(message: Message, state: FSMContext) -> None:
+    hhmm = _parse_hhmm(message.text)
+    if not hhmm:
+        await message.answer("Vaqt formati noto‘g‘ri. <b>HH:MM</b> ko‘rinishida kiriting (masalan: 18:00).")
+        return
+    await state.update_data(send_time=hhmm)
+    await state.set_state(AddPost.content)
+    await message.answer(
+        "Endi yubormoqchi bo‘lgan <b>postni</b> yuboring "
+        "(matn, rasm, rasm + izoh — istalgan ko‘rinishda)."
+    )
+
+
+@router.message(AddPost.content)
+async def on_sched_content(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    preview = ((message.text or message.caption or "post").strip().replace("\n", " "))[:120]
+    post = await repo.create_scheduled_post(
+        weekday=data["weekday"],
+        send_time=data["send_time"],
+        from_chat_id=message.chat.id,
+        message_id=message.message_id,
+        preview=preview,
+    )
+    await state.clear()
+    await message.answer(
+        "✅ <b>Post rejalashtirildi!</b>\n"
+        f"🗓 {WEEKDAY_NAMES[post.weekday]} · 🕒 {post.send_time}\n"
+        "Ushbu kun kelganda barcha faol foydalanuvchilarga yuboriladi."
+    )
+    await message.answer(await _schedule_menu_text(), reply_markup=schedule_menu_kb())
+
+
+@router.callback_query(SchedPost.filter(F.action == "view"))
+async def on_sched_post_view(callback: CallbackQuery, callback_data: SchedPost) -> None:
+    await callback.answer()
+    post = await repo.get_scheduled_post(callback_data.post_id)
+    if post is None:
+        await callback.message.answer("Post topilmadi.")
+        return
+    await callback.message.answer(_post_text(post), reply_markup=scheduled_post_kb(post.id))
+
+
+@router.callback_query(SchedPost.filter(F.action == "delete"))
+async def on_sched_post_delete(callback: CallbackQuery, callback_data: SchedPost) -> None:
+    await callback.answer()
+    await callback.message.answer(
+        "⚠️ Ushbu rejalashtirilgan post o‘chirilsinmi?",
+        reply_markup=scheduled_confirm_delete_kb(callback_data.post_id),
+    )
+
+
+@router.callback_query(SchedPost.filter(F.action == "confirmdel"))
+async def on_sched_post_confirmdel(callback: CallbackQuery, callback_data: SchedPost) -> None:
+    ok = await repo.delete_scheduled_post(callback_data.post_id)
+    await callback.answer("O‘chirildi" if ok else "Topilmadi", show_alert=True)
+    posts = await repo.list_scheduled_posts()
+    if posts:
+        await callback.message.answer("📋 Rejalashtirilgan postlar:", reply_markup=scheduled_list_kb(posts))
+    else:
+        await callback.message.answer(await _schedule_menu_text(), reply_markup=schedule_menu_kb())

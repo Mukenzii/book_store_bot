@@ -13,6 +13,7 @@ from bot.database import engine, init_db
 from bot.handlers import get_root_router
 from bot.healthcheck import HEARTBEAT_FILE
 from bot.middlewares import RegisterUserMiddleware
+from bot.scheduler import scheduler_loop
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,13 +59,18 @@ async def main() -> None:
     logger.info("Database ready. Starting Book Store bot…")
 
     heartbeat = asyncio.create_task(_heartbeat())
+    scheduler = asyncio.create_task(scheduler_loop(bot))
     try:
         await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot)
+        # polling_timeout=25 keeps the long-poll connection cycling every ~25s
+        # so a firewall/NAT can't drop it as "idle" (the ~2-min reset pattern).
+        # aiogram already auto-reconnects on any transient network error.
+        await dp.start_polling(bot, polling_timeout=25)
     finally:
-        # Graceful shutdown: stop the heartbeat, close the bot session and the
+        # Graceful shutdown: stop background tasks, close the bot session and the
         # DB connection pool so we don't leak sockets on SIGTERM.
         heartbeat.cancel()
+        scheduler.cancel()
         await bot.session.close()
         await engine.dispose()
         logger.info("Shutdown complete.")

@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     sheet_id: str = "1x8zH8C4aFXsUbqh0cAqIJaN0O0Sv5q5wdVXk-zEHOVc"
     sheet_gid: str = "0"
 
+    # Timezone offset (hours from UTC) for interpreting scheduled-post times.
+    # Tashkent = +5 (no DST). The container clock is UTC.
+    schedule_tz_offset: int = 5
+
     @property
     def admin_id_set(self) -> set[int]:
         ids: set[int] = set()

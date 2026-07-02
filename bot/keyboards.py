@@ -6,8 +6,19 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
-from bot.models import Store
+from bot.models import ScheduledPost, Store
 from bot.repository import StoreWithDistance
+
+# Uzbek weekday names, indexed by datetime.weekday() (0=Mon … 6=Sun).
+WEEKDAY_NAMES = [
+    "Dushanba",
+    "Seshanba",
+    "Chorshanba",
+    "Payshanba",
+    "Juma",
+    "Shanba",
+    "Yakshanba",
+]
 
 
 class StoreCallback(CallbackData, prefix="store"):
@@ -38,6 +49,23 @@ class AdminField(CallbackData, prefix="admfld"):
 
 class BroadcastCB(CallbackData, prefix="bcast"):
     action: str  # send | cancel
+
+
+class SchedMenu(CallbackData, prefix="sch"):
+    action: str  # days | list | add | menu
+
+
+class SchedDay(CallbackData, prefix="schday"):
+    weekday: int  # toggle this weekday on/off in the days view
+
+
+class SchedPick(CallbackData, prefix="schpick"):
+    weekday: int  # pick this weekday for a new scheduled post
+
+
+class SchedPost(CallbackData, prefix="schpost"):
+    action: str  # view | delete | confirmdel
+    post_id: int
 
 
 PAGE_SIZE = 8
@@ -85,6 +113,7 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="➕ Do‘kon qo‘shish", callback_data=AdminMenu(action="add").pack())],
             [InlineKeyboardButton(text="📋 Do‘konlar ro‘yxati", callback_data=AdminMenu(action="list").pack())],
             [InlineKeyboardButton(text="📢 Hammaga xabar yuborish", callback_data=AdminMenu(action="broadcast").pack())],
+            [InlineKeyboardButton(text="📅 Rejalashtirilgan postlar", callback_data=AdminMenu(action="schedule").pack())],
             [InlineKeyboardButton(text="✖️ Yopish", callback_data=AdminMenu(action="close").pack())],
         ]
     )
@@ -141,5 +170,75 @@ def broadcast_confirm_kb(audience: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text=f"✅ {audience} ta foydalanuvchiga yuborish", callback_data=BroadcastCB(action="send").pack())],
             [InlineKeyboardButton(text="🔙 Bekor qilish", callback_data=BroadcastCB(action="cancel").pack())],
+        ]
+    )
+
+
+# --- scheduled-posts keyboards -----------------------------------------------
+
+def schedule_menu_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🗓 Kunlarni tanlash", callback_data=SchedMenu(action="days").pack())],
+            [InlineKeyboardButton(text="➕ Post rejalashtirish", callback_data=SchedMenu(action="add").pack())],
+            [InlineKeyboardButton(text="📋 Rejalashtirilgan postlar", callback_data=SchedMenu(action="list").pack())],
+            [InlineKeyboardButton(text="🔙 Menyu", callback_data=AdminMenu(action="menu").pack())],
+        ]
+    )
+
+
+def schedule_days_kb(enabled: set[int]) -> InlineKeyboardMarkup:
+    """Toggle buttons for each weekday (✅ enabled / ⬜ disabled)."""
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{'✅' if i in enabled else '⬜'} {name}",
+                callback_data=SchedDay(weekday=i).pack(),
+            )
+        ]
+        for i, name in enumerate(WEEKDAY_NAMES)
+    ]
+    rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data=SchedMenu(action="menu").pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def schedule_pick_day_kb(enabled: set[int]) -> InlineKeyboardMarkup:
+    """Buttons for the enabled weekdays, to pick a day for a new post."""
+    rows = [
+        [InlineKeyboardButton(text=WEEKDAY_NAMES[i], callback_data=SchedPick(weekday=i).pack())]
+        for i in sorted(enabled)
+    ]
+    rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data=SchedMenu(action="menu").pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def scheduled_list_kb(posts: list[ScheduledPost]) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{WEEKDAY_NAMES[p.weekday]} {p.send_time} · {p.preview or 'post'}"[:60],
+                callback_data=SchedPost(action="view", post_id=p.id).pack(),
+            )
+        ]
+        for p in posts
+    ]
+    rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data=SchedMenu(action="menu").pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def scheduled_post_kb(post_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🗑 O‘chirish", callback_data=SchedPost(action="delete", post_id=post_id).pack())],
+            [InlineKeyboardButton(text="📋 Ro‘yxatga qaytish", callback_data=SchedMenu(action="list").pack())],
+        ]
+    )
+
+
+def scheduled_confirm_delete_kb(post_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Ha, o‘chirilsin", callback_data=SchedPost(action="confirmdel", post_id=post_id).pack())],
+            [InlineKeyboardButton(text="🔙 Bekor qilish", callback_data=SchedPost(action="view", post_id=post_id).pack())],
         ]
     )

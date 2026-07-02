@@ -30,3 +30,10 @@ class Broadcast(StatesGroup):
 
     message = State()   # waiting for the admin's content
     confirm = State()   # waiting for the confirm button
+
+
+class AddPost(StatesGroup):
+    """Admin flow for scheduling a weekly post (weekday chosen via buttons)."""
+
+    time = State()      # waiting for "HH:MM" — data carries the chosen weekday
+    content = State()   # waiting for the post message to schedule
