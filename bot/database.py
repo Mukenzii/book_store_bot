@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from bot.config import settings
@@ -25,6 +26,11 @@ async def init_db(retries: int = 10, delay: float = 2.0) -> None:
         try:
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                # Light migrations: create_all never ALTERs existing tables, so
+                # add newer columns idempotently for databases created earlier.
+                await conn.execute(
+                    text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(32)")
+                )
             return
         except Exception as exc:  # noqa: BLE001 — broad on purpose during boot
             if attempt == retries:

@@ -183,6 +183,19 @@ async def set_user_active(user_id: int, active: bool) -> None:
             await session.commit()
 
 
+async def get_user(user_id: int) -> User | None:
+    async with session_factory() as session:
+        return await session.get(User, user_id)
+
+
+async def set_user_phone(user_id: int, phone: str) -> None:
+    async with session_factory() as session:
+        user = await session.get(User, user_id)
+        if user is not None:
+            user.phone = phone
+            await session.commit()
+
+
 async def active_user_ids() -> list[int]:
     from sqlalchemy import select
 

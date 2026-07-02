@@ -28,6 +28,8 @@ class User(Base):
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     language_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Shared by the user via the "send phone" button on first /start.
+    phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Flipped to False when the user blocks the bot, so broadcasts skip them.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(

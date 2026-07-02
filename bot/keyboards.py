@@ -91,6 +91,16 @@ def send_location_kb() -> ReplyKeyboardMarkup:
     )
 
 
+def request_phone_kb() -> ReplyKeyboardMarkup:
+    """Reply keyboard with a native 'share phone number' button (first visit)."""
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="📱 Telefon raqamni yuborish", request_contact=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+        input_field_placeholder="Telefon raqamingizni ulashing",
+    )
+
+
 def stores_list_kb(stores: list[StoreWithDistance]) -> InlineKeyboardMarkup:
     """Inline list of nearby stores, one button per store."""
     rows = [

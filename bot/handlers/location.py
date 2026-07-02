@@ -2,17 +2,28 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 
+from bot import repository as repo
 from bot.config import settings
-from bot.keyboards import request_location_kb, stores_list_kb
+from bot.keyboards import request_location_kb, request_phone_kb, stores_list_kb
 from bot.repository import find_nearest_stores
 from bot.states import StoreSearch
 
 router = Router()
 
+ASK_PHONE = (
+    "Botdan foydalanish uchun avval telefon raqamingizni ulashing 👇"
+)
+
 
 @router.message(F.location)
 async def handle_location(message: Message, state: FSMContext) -> None:
     """User shared a location — find and offer the nearest stores."""
+    # Require a phone number on file before serving results.
+    user = await repo.get_user(message.from_user.id)
+    if not (user and user.phone):
+        await message.answer(ASK_PHONE, reply_markup=request_phone_kb())
+        return
+
     lat = message.location.latitude
     lon = message.location.longitude
 
