@@ -39,6 +39,12 @@ services:
     container_name: books_store_bot
     restart: unless-stopped
     env_file: .env
+    # Use reliable public DNS resolvers — the VPS's default resolver is flaky
+    # and was intermittently failing to resolve api.telegram.org (the root of
+    # the recurring "Request timeout" / name-resolution errors).
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       DB_HOST: db
     # In webhook mode the bot serves on this port; Caddy reaches it over the
@@ -60,6 +66,9 @@ services:
     image: caddy:2-alpine
     container_name: books_store_caddy
     restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     ports:
       - "80:80"
       - "443:443"
