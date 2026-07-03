@@ -1,0 +1,6 @@
+# Caddy automatically obtains & renews a Let's Encrypt certificate for this
+# domain and reverse-proxies Telegram's webhook POSTs to the bot container.
+# The domain's A record must point at this VPS, and ports 80 + 443 must be open.
+falaqnashrcloud.uz {
+	reverse_proxy bot:8080
+}

@@ -44,6 +44,44 @@ async def _heartbeat() -> None:
         await asyncio.sleep(30)
 
 
+async def _start_webhook(bot: Bot, dp: Dispatcher):
+    """Register the webhook + start the aiohttp server. Returns the AppRunner.
+
+    Telegram pushes updates to us, so there is no long-poll connection to time
+    out — this eliminates the periodic 'Request timeout' / expired-callback
+    errors that happen on a flaky outbound connection.
+    """
+    from aiohttp import web
+    from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+
+    await bot.set_webhook(
+        url=settings.full_webhook_url,
+        secret_token=settings.resolved_secret,
+        drop_pending_updates=True,
+        allowed_updates=dp.resolve_used_update_types(),
+    )
+
+    app = web.Application()
+
+    async def health(_request):
+        return web.Response(text="ok")
+
+    app.router.add_get("/healthz", health)
+    SimpleRequestHandler(
+        dispatcher=dp, bot=bot, secret_token=settings.resolved_secret
+    ).register(app, path=settings.webhook_path)
+    setup_application(app, dp, bot=bot)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host="0.0.0.0", port=settings.web_port)
+    await site.start()
+    logger.info(
+        "Webhook mode: %s  (listening on :%s)", settings.full_webhook_url, settings.web_port
+    )
+    return runner
+
+
 async def main() -> None:
     _require_token()
 
@@ -60,17 +98,24 @@ async def main() -> None:
 
     heartbeat = asyncio.create_task(_heartbeat())
     scheduler = asyncio.create_task(scheduler_loop(bot))
+    runner = None
     try:
-        await bot.delete_webhook(drop_pending_updates=True)
-        # polling_timeout=25 keeps the long-poll connection cycling every ~25s
-        # so a firewall/NAT can't drop it as "idle" (the ~2-min reset pattern).
-        # aiogram already auto-reconnects on any transient network error.
-        await dp.start_polling(bot, polling_timeout=25)
+        if settings.use_webhook:
+            runner = await _start_webhook(bot, dp)
+            await asyncio.Event().wait()  # serve until the process is stopped
+        else:
+            await bot.delete_webhook(drop_pending_updates=True)
+            # polling_timeout=25 keeps the long-poll connection cycling every
+            # ~25s so a firewall/NAT can't drop it as "idle". aiogram already
+            # auto-reconnects on any transient network error.
+            await dp.start_polling(bot, polling_timeout=25)
     finally:
-        # Graceful shutdown: stop background tasks, close the bot session and the
-        # DB connection pool so we don't leak sockets on SIGTERM.
+        # Graceful shutdown: stop background tasks, tear down the web server,
+        # close the bot session and the DB connection pool.
         heartbeat.cancel()
         scheduler.cancel()
+        if runner is not None:
+            await runner.cleanup()
         await bot.session.close()
         await engine.dispose()
         logger.info("Shutdown complete.")

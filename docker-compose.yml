@@ -41,6 +41,10 @@ services:
     env_file: .env
     environment:
       DB_HOST: db
+    # In webhook mode the bot serves on this port; Caddy reaches it over the
+    # internal network (no host port needed).
+    expose:
+      - "8080"
     depends_on:
       db:
         condition: service_healthy
@@ -49,6 +53,23 @@ services:
       resources:
         limits:
           memory: 384M
+
+  # Reverse proxy with automatic HTTPS (Let's Encrypt). Only needed in webhook
+  # mode. Terminates TLS for the domain and forwards to the bot.
+  caddy:
+    image: caddy:2-alpine
+    container_name: books_store_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - bot
+    logging: *default-logging
 
   # One-shot helper to (re)load store data. Opt-in via a Compose profile so it
   # never runs as part of `docker compose up`. Examples:
@@ -67,3 +88,5 @@ services:
 
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
