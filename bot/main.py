@@ -101,7 +101,16 @@ async def main() -> None:
     runner = None
     try:
         if settings.use_webhook:
-            runner = await _start_webhook(bot, dp)
+            try:
+                runner = await _start_webhook(bot, dp)
+            except Exception as exc:  # noqa: BLE001 — keep the bot alive
+                logger.error(
+                    "Webhook setup FAILED: %s. Falling back to polling. "
+                    "Check that %s has a DNS A record pointing to this server "
+                    "and ports 80/443 are open.",
+                    exc, settings.webhook_url,
+                )
+        if runner is not None:
             await asyncio.Event().wait()  # serve until the process is stopped
         else:
             await bot.delete_webhook(drop_pending_updates=True)
