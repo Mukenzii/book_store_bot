@@ -54,12 +54,22 @@ async def _start_webhook(bot: Bot, dp: Dispatcher):
     from aiohttp import web
     from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
-    await bot.set_webhook(
-        url=settings.full_webhook_url,
-        secret_token=settings.resolved_secret,
-        drop_pending_updates=True,
-        allowed_updates=dp.resolve_used_update_types(),
-    )
+    # Retry set_webhook to ride out a transient DNS blip resolving
+    # api.telegram.org right after the container starts.
+    for attempt in range(1, 7):
+        try:
+            await bot.set_webhook(
+                url=settings.full_webhook_url,
+                secret_token=settings.resolved_secret,
+                drop_pending_updates=True,
+                allowed_updates=dp.resolve_used_update_types(),
+            )
+            break
+        except Exception as exc:  # noqa: BLE001
+            if attempt == 6:
+                raise
+            logger.warning("set_webhook attempt %d/6 failed: %s — retrying in 3s", attempt, exc)
+            await asyncio.sleep(3)
 
     app = web.Application()
 
