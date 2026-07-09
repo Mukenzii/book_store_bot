@@ -1,6 +1,6 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.types import Message
 
 from bot import repository as repo
 from bot.config import settings
@@ -41,10 +41,12 @@ async def handle_location(message: Message, state: FSMContext) -> None:
     await state.set_state(StoreSearch.choosing_store)
     await state.update_data(lat=lat, lon=lon)
 
+    # Keep the location button visible (don't remove the reply keyboard) so the
+    # user can search again anytime.
     await message.answer(
         f"Sizga eng yaqin {len(stores)} ta do‘kon. "
         "Tafsilotlarini ko‘rish uchun birini tanlang 👇",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=request_location_kb(),
     )
     await message.answer(
         "Eng yaqin kitob do‘konlari:",

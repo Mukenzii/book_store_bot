@@ -72,11 +72,16 @@ PAGE_SIZE = 8
 
 
 def request_location_kb() -> ReplyKeyboardMarkup:
-    """Reply keyboard with a native 'share location' button."""
+    """Reply keyboard with a native 'share location' button.
+
+    one_time_keyboard=False so the button stays visible — the user can keep
+    sending new locations without it ever disappearing.
+    """
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="📍 Joylashuvni yuborish", request_location=True)]],
         resize_keyboard=True,
-        one_time_keyboard=True,
+        one_time_keyboard=False,
+        is_persistent=True,
         input_field_placeholder="Joylashuvni ulashish uchun tugmani bosing",
     )
 
