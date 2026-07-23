@@ -84,3 +84,15 @@ class ScheduledPost(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class Admin(Base):
+    """An admin added dynamically through the bot (in addition to ADMIN_IDS)."""
+
+    __tablename__ = "admins"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    added_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

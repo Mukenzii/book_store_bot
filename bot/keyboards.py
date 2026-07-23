@@ -68,6 +68,11 @@ class SchedPost(CallbackData, prefix="schpost"):
     post_id: int
 
 
+class AdminMgmt(CallbackData, prefix="admgmt"):
+    action: str  # add | remove | confirmrm | back
+    user_id: int = 0
+
+
 PAGE_SIZE = 8
 
 
@@ -129,6 +134,7 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="📋 Do‘konlar ro‘yxati", callback_data=AdminMenu(action="list").pack())],
             [InlineKeyboardButton(text="📢 Hammaga xabar yuborish", callback_data=AdminMenu(action="broadcast").pack())],
             [InlineKeyboardButton(text="📅 Rejalashtirilgan postlar", callback_data=AdminMenu(action="schedule").pack())],
+            [InlineKeyboardButton(text="👑 Adminlar", callback_data=AdminMenu(action="admins").pack())],
             [InlineKeyboardButton(text="✖️ Yopish", callback_data=AdminMenu(action="close").pack())],
         ]
     )
@@ -255,5 +261,33 @@ def scheduled_confirm_delete_kb(post_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="✅ Ha, o‘chirilsin", callback_data=SchedPost(action="confirmdel", post_id=post_id).pack())],
             [InlineKeyboardButton(text="🔙 Bekor qilish", callback_data=SchedPost(action="view", post_id=post_id).pack())],
+        ]
+    )
+
+
+# --- admin-management keyboards ----------------------------------------------
+
+def admins_kb(rows_data: list[tuple[int, str, bool]]) -> InlineKeyboardMarkup:
+    """rows_data: list of (user_id, label, is_primary). Primary admins (from
+    ADMIN_IDS) are shown with a star and can't be removed."""
+    rows = []
+    for user_id, label, is_primary in rows_data:
+        if is_primary:
+            rows.append([InlineKeyboardButton(text=f"⭐ {label}"[:64], callback_data=AdminMgmt(action="back").pack())])
+        else:
+            rows.append([
+                InlineKeyboardButton(text=label[:56], callback_data=AdminMgmt(action="back").pack()),
+                InlineKeyboardButton(text="🗑", callback_data=AdminMgmt(action="remove", user_id=user_id).pack()),
+            ])
+    rows.append([InlineKeyboardButton(text="➕ Admin qo‘shish", callback_data=AdminMgmt(action="add").pack())])
+    rows.append([InlineKeyboardButton(text="🔙 Menyu", callback_data=AdminMenu(action="menu").pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def admin_remove_confirm_kb(user_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Ha, olib tashlansin", callback_data=AdminMgmt(action="confirmrm", user_id=user_id).pack())],
+            [InlineKeyboardButton(text="🔙 Bekor qilish", callback_data=AdminMgmt(action="back").pack())],
         ]
     )

@@ -1,12 +1,12 @@
 from aiogram.filters import BaseFilter
 from aiogram.types import CallbackQuery, Message
 
-from bot.config import settings
+from bot import admins
 
 
 class IsAdmin(BaseFilter):
-    """Passes only for chat IDs listed in ADMIN_IDS."""
+    """Passes for env ADMIN_IDS plus admins added through the bot."""
 
     async def __call__(self, event: Message | CallbackQuery) -> bool:
         user = event.from_user
-        return bool(user and user.id in settings.admin_id_set)
+        return bool(user and admins.is_admin(user.id))

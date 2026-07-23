@@ -37,3 +37,9 @@ class AddPost(StatesGroup):
 
     time = State()      # waiting for "HH:MM" — data carries the chosen weekday
     content = State()   # waiting for the post message to schedule
+
+
+class AddAdmin(StatesGroup):
+    """Admin flow for granting admin rights to another user."""
+
+    waiting = State()   # waiting for an id / forwarded message / shared contact

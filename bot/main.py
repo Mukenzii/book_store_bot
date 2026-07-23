@@ -8,6 +8,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
+from bot import admins
 from bot.config import settings
 from bot.database import engine, init_db
 from bot.handlers import get_root_router
@@ -104,6 +105,7 @@ async def main() -> None:
     dp.include_router(get_root_router())
 
     await init_db()
+    await admins.load()  # warm the dynamic-admin cache
     logger.info("Database ready. Starting Book Store bot…")
 
     heartbeat = asyncio.create_task(_heartbeat())

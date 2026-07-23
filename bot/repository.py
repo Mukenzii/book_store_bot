@@ -4,7 +4,7 @@ from datetime import date
 from sqlalchemy import text
 
 from bot.database import session_factory
-from bot.models import ScheduledPost, Setting, Store, User
+from bot.models import Admin, ScheduledPost, Setting, Store, User
 
 
 @dataclass(slots=True)
@@ -321,3 +321,33 @@ async def mark_post_sent(post_id: int, sent_on: date) -> None:
         if post is not None:
             post.last_sent_on = sent_on
             await session.commit()
+
+
+# --- dynamically-added admins -----------------------------------------------
+
+async def get_admin_ids() -> set[int]:
+    from sqlalchemy import select
+
+    async with session_factory() as session:
+        result = await session.scalars(select(Admin.id))
+        return set(result)
+
+
+async def add_admin(user_id: int, added_by: int | None) -> bool:
+    """Add an admin. Returns False if they were already an admin."""
+    async with session_factory() as session:
+        if await session.get(Admin, user_id) is not None:
+            return False
+        session.add(Admin(id=user_id, added_by=added_by))
+        await session.commit()
+        return True
+
+
+async def remove_admin(user_id: int) -> bool:
+    async with session_factory() as session:
+        admin = await session.get(Admin, user_id)
+        if admin is None:
+            return False
+        await session.delete(admin)
+        await session.commit()
+        return True

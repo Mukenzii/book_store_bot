@@ -5,7 +5,9 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
+from bot import admins
 from bot.broadcast import broadcast_copy
+from bot.config import settings
 from bot.filters import IsAdmin
 from bot.formatting import format_store_admin
 from bot.keyboards import (
@@ -13,6 +15,7 @@ from bot.keyboards import (
     WEEKDAY_NAMES,
     AdminField,
     AdminMenu,
+    AdminMgmt,
     AdminPage,
     AdminStore,
     BroadcastCB,
@@ -23,7 +26,9 @@ from bot.keyboards import (
     admin_confirm_delete_kb,
     admin_list_kb,
     admin_menu_kb,
+    admin_remove_confirm_kb,
     admin_store_kb,
+    admins_kb,
     broadcast_confirm_kb,
     schedule_days_kb,
     schedule_menu_kb,
@@ -34,7 +39,7 @@ from bot.keyboards import (
     send_location_kb,
 )
 from bot import repository as repo
-from bot.states import AddPost, AddStore, Broadcast, EditStore
+from bot.states import AddAdmin, AddPost, AddStore, Broadcast, EditStore
 
 # Every handler here is gated to admins for both messages and callbacks.
 router = Router()
@@ -138,6 +143,10 @@ async def on_menu(callback: CallbackQuery, callback_data: AdminMenu, state: FSMC
     if callback_data.action == "schedule":
         await state.clear()
         await callback.message.answer(await _schedule_menu_text(), reply_markup=schedule_menu_kb())
+        return
+    if callback_data.action == "admins":
+        await state.clear()
+        await callback.message.answer(await _admins_text(), reply_markup=admins_kb(await _admins_rows()))
 
 
 @router.callback_query(AdminPage.filter())
@@ -487,3 +496,114 @@ async def on_sched_post_confirmdel(callback: CallbackQuery, callback_data: Sched
         await callback.message.answer("📋 Rejalashtirilgan postlar:", reply_markup=scheduled_list_kb(posts))
     else:
         await callback.message.answer(await _schedule_menu_text(), reply_markup=schedule_menu_kb())
+
+
+# --- admin management (add / remove admins) ---------------------------------
+
+async def _admin_label(user_id: int) -> str:
+    user = await repo.get_user(user_id)
+    name = (user.first_name or user.username) if user else None
+    return f"{name} · {user_id}" if name else str(user_id)
+
+
+async def _admins_rows() -> list[tuple[int, str, bool]]:
+    primary = settings.admin_id_set
+    db_only = admins.all_admin_ids() - primary
+    rows: list[tuple[int, str, bool]] = []
+    for uid in sorted(primary):
+        rows.append((uid, await _admin_label(uid), True))
+    for uid in sorted(db_only):
+        rows.append((uid, await _admin_label(uid), False))
+    return rows
+
+
+async def _admins_text() -> str:
+    total = len(admins.all_admin_ids())
+    return (
+        "👑 <b>Adminlar</b>\n"
+        f"Jami: <b>{total}</b> ta\n\n"
+        "⭐ — asosiy admin (o‘chirib bo‘lmaydi). Yangi admin qo‘shish uchun "
+        "«➕ Admin qo‘shish» tugmasini bosing."
+    )
+
+
+def _extract_user_id(message: Message) -> int | None:
+    """Get a target user id from a numeric text, forwarded message, or contact."""
+    if message.contact and message.contact.user_id:
+        return message.contact.user_id
+    fwd = getattr(message, "forward_from", None)
+    if fwd:
+        return fwd.id
+    origin = getattr(message, "forward_origin", None)
+    if origin and getattr(origin, "sender_user", None):
+        return origin.sender_user.id
+    if message.text and message.text.strip().isdigit():
+        return int(message.text.strip())
+    return None
+
+
+@router.callback_query(AdminMgmt.filter(F.action == "back"))
+async def on_admins_back(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    await state.clear()
+    await callback.message.answer(await _admins_text(), reply_markup=admins_kb(await _admins_rows()))
+
+
+@router.callback_query(AdminMgmt.filter(F.action == "add"))
+async def on_admin_add_prompt(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    await state.set_state(AddAdmin.waiting)
+    await callback.message.answer(
+        "➕ <b>Yangi admin</b>\n\n"
+        "Yangi adminni qo‘shish uchun quyidagilardan birini yuboring:\n"
+        "• uning <b>Telegram ID</b> raqamini,\n"
+        "• undan <b>forward</b> qilingan xabarni,\n"
+        "• yoki uning <b>kontaktini</b>.\n\n"
+        "Bekor qilish uchun /cancel.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+@router.message(AddAdmin.waiting)
+async def on_admin_add(message: Message, state: FSMContext) -> None:
+    user_id = _extract_user_id(message)
+    if user_id is None:
+        await message.answer(
+            "Foydalanuvchini aniqlay olmadim. Raqamli ID, forward xabar yoki "
+            "kontakt yuboring (yoki /cancel)."
+        )
+        return
+
+    if admins.is_admin(user_id):
+        await state.clear()
+        who = "asosiy admin" if admins.is_primary_admin(user_id) else "admin"
+        await message.answer(f"Bu foydalanuvchi allaqachon {who}.")
+        await message.answer(await _admins_text(), reply_markup=admins_kb(await _admins_rows()))
+        return
+
+    await admins.add(user_id, added_by=message.from_user.id)
+    await state.clear()
+    await message.answer(f"✅ Yangi admin qo‘shildi: <b>{await _admin_label(user_id)}</b>")
+    await message.answer(await _admins_text(), reply_markup=admins_kb(await _admins_rows()))
+
+
+@router.callback_query(AdminMgmt.filter(F.action == "remove"))
+async def on_admin_remove_prompt(callback: CallbackQuery, callback_data: AdminMgmt) -> None:
+    await callback.answer()
+    if admins.is_primary_admin(callback_data.user_id):
+        await callback.answer("Asosiy adminni o‘chirib bo‘lmaydi.", show_alert=True)
+        return
+    await callback.message.answer(
+        f"⚠️ <b>{await _admin_label(callback_data.user_id)}</b> adminlikdan olib tashlansinmi?",
+        reply_markup=admin_remove_confirm_kb(callback_data.user_id),
+    )
+
+
+@router.callback_query(AdminMgmt.filter(F.action == "confirmrm"))
+async def on_admin_remove_confirm(callback: CallbackQuery, callback_data: AdminMgmt) -> None:
+    if admins.is_primary_admin(callback_data.user_id):
+        await callback.answer("Asosiy adminni o‘chirib bo‘lmaydi.", show_alert=True)
+        return
+    ok = await admins.remove(callback_data.user_id)
+    await callback.answer("Olib tashlandi" if ok else "Topilmadi", show_alert=True)
+    await callback.message.answer(await _admins_text(), reply_markup=admins_kb(await _admins_rows()))
