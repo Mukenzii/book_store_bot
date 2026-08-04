@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import text
 
@@ -153,6 +153,7 @@ async def upsert_user(
     language_code: str | None,
 ) -> None:
     """Insert the user, or refresh their details and re-activate on conflict."""
+    from sqlalchemy import func
     from sqlalchemy.dialects.postgresql import insert
 
     stmt = insert(User).values(
@@ -168,10 +169,22 @@ async def upsert_user(
             "first_name": stmt.excluded.first_name,
             "language_code": stmt.excluded.language_code,
             "is_active": True,
+            "last_seen": func.now(),
         },
     )
     async with session_factory() as session:
         await session.execute(stmt)
+        await session.commit()
+
+
+async def touch_user(user_id: int) -> None:
+    """Bump only last_seen — the cheap path for a user we've already registered."""
+    from sqlalchemy import func, update
+
+    async with session_factory() as session:
+        await session.execute(
+            update(User).where(User.id == user_id).values(last_seen=func.now())
+        )
         await session.commit()
 
 
@@ -214,6 +227,21 @@ async def count_users() -> tuple[int, int]:
             select(func.count()).select_from(User).where(User.is_active.is_(True))
         ) or 0
         return total, active
+
+
+async def count_active_within(minutes: int) -> int:
+    """Count users whose last interaction was within the last `minutes`.
+
+    This is the honest "recently active" number — a Telegram bot never learns
+    that a user is *currently* online, only when they last did something.
+    """
+    from sqlalchemy import func, select
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    async with session_factory() as session:
+        return await session.scalar(
+            select(func.count()).select_from(User).where(User.last_seen >= cutoff)
+        ) or 0
 
 
 # --- weekly schedule: enabled days + scheduled posts -------------------------

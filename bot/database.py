@@ -31,6 +31,12 @@ async def init_db(retries: int = 10, delay: float = 2.0) -> None:
                 await conn.execute(
                     text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(32)")
                 )
+                await conn.execute(
+                    text(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+                        "last_seen TIMESTAMPTZ NOT NULL DEFAULT now()"
+                    )
+                )
             return
         except Exception as exc:  # noqa: BLE001 — broad on purpose during boot
             if attempt == retries:

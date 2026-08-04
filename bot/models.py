@@ -35,6 +35,12 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # Refreshed on every interaction (throttled) — powers the "recently active"
+    # stats. A Telegram bot only sees a user when they act, so this is the
+    # closest thing to "online": last time they sent/tapped anything.
+    last_seen: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class Store(Base):

@@ -74,10 +74,18 @@ def _clean(text: str) -> str | None:
 async def _menu_text() -> str:
     stores = await repo.count_stores()
     total_users, active_users = await repo.count_users()
+    online_10m = await repo.count_active_within(10)
+    active_today = await repo.count_active_within(24 * 60)
+    active_week = await repo.count_active_within(7 * 24 * 60)
     return (
         "🛠 <b>Admin panel</b>\n"
         f"📚 Do‘konlar: <b>{stores}</b>\n"
-        f"👥 Foydalanuvchilar: <b>{total_users}</b> (faol: {active_users})"
+        f"👥 Foydalanuvchilar: <b>{total_users}</b> (obuna: {active_users})\n"
+        "\n"
+        "🟢 <b>Faollik</b>\n"
+        f"• Oxirgi 10 daqiqada: <b>{online_10m}</b>\n"
+        f"• Bugun: <b>{active_today}</b>\n"
+        f"• Bu hafta: <b>{active_week}</b>"
     )
 
 
