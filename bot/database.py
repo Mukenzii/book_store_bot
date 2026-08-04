@@ -31,11 +31,46 @@ async def init_db(retries: int = 10, delay: float = 2.0) -> None:
                 await conn.execute(
                     text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(32)")
                 )
+                # last_seen: add it NULLABLE first, then backfill from
+                # created_at. Adding it with `DEFAULT now()` would stamp every
+                # existing user with the deploy time, making all of them look
+                # "active" at once — which is exactly the bug we're fixing.
+                await conn.execute(
+                    text("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ")
+                )
+                # Fresh rows from the ADD COLUMN have NULL last_seen — seed them
+                # from when the user actually joined (their real last-known
+                # activity), not from now.
                 await conn.execute(
                     text(
-                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
-                        "last_seen TIMESTAMPTZ NOT NULL DEFAULT now()"
+                        "UPDATE users SET last_seen = COALESCE(created_at, now()) "
+                        "WHERE last_seen IS NULL"
                     )
+                )
+                # One-time repair for databases where the first version of this
+                # migration already stamped everyone with now(). Runs exactly
+                # once, guarded by a marker in settings, so genuine activity
+                # recorded afterwards is never clobbered.
+                repaired = await conn.scalar(
+                    text("SELECT value FROM settings WHERE key = 'last_seen_repaired'")
+                )
+                if not repaired:
+                    await conn.execute(
+                        text("UPDATE users SET last_seen = COALESCE(created_at, last_seen)")
+                    )
+                    await conn.execute(
+                        text(
+                            "INSERT INTO settings (key, value) "
+                            "VALUES ('last_seen_repaired', '1') "
+                            "ON CONFLICT (key) DO UPDATE SET value = '1'"
+                        )
+                    )
+                # Now enforce the invariant for all future inserts.
+                await conn.execute(
+                    text("ALTER TABLE users ALTER COLUMN last_seen SET DEFAULT now()")
+                )
+                await conn.execute(
+                    text("ALTER TABLE users ALTER COLUMN last_seen SET NOT NULL")
                 )
             return
         except Exception as exc:  # noqa: BLE001 — broad on purpose during boot
