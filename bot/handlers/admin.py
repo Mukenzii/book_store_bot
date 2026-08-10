@@ -248,6 +248,12 @@ async def on_edit_value(message: Message, state: FSMContext) -> None:
     if field == "name" and not value:
         await message.answer("Nom bo‘sh bo‘lishi mumkin emas. Qaytadan kiriting:")
         return
+    if field == "phone" and (not value or sum(c.isdigit() for c in value) < 7):
+        await message.answer(
+            "❌ Telefon raqami majburiy. To‘g‘ri raqam kiriting "
+            "(masalan: +998 90 123 45 67):"
+        )
+        return
 
     await repo.update_store(data["store_id"], **{_col(field): value})
     await state.clear()
@@ -280,7 +286,7 @@ async def add_location(message: Message, state: FSMContext) -> None:
     await state.set_state(AddStore.phone)
     await message.answer(
         f"✅ Koordinata olindi: <code>{lat:.6f}, {lon:.6f}</code>\n\n"
-        "☎️ <b>Telefon</b> raqamini kiriting (bo‘sh qoldirish uchun «-»):",
+        "☎️ <b>Telefon</b> raqamini kiriting (masalan: +998 90 123 45 67):",
         reply_markup=ReplyKeyboardRemove(),
     )
 
@@ -292,7 +298,16 @@ async def add_location_invalid(message: Message) -> None:
 
 @router.message(AddStore.phone, F.text)
 async def add_phone(message: Message, state: FSMContext) -> None:
-    await state.update_data(phone=_clean(message.text))
+    phone = (message.text or "").strip()
+    # Phone is required — a store with no way to call it is useless. Insist on
+    # something that actually contains digits.
+    if not phone or phone in _SKIP or sum(c.isdigit() for c in phone) < 7:
+        await message.answer(
+            "❌ Telefon raqami majburiy. Iltimos, to‘g‘ri raqam kiriting "
+            "(masalan: +998 90 123 45 67):"
+        )
+        return
+    await state.update_data(phone=phone)
     await state.set_state(AddStore.hours)
     await message.answer("🕒 <b>Ish vaqtini</b> kiriting (masalan: 09:00–21:00, «-» bo‘sh):")
 
