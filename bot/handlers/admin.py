@@ -169,7 +169,8 @@ async def on_menu(callback: CallbackQuery, callback_data: AdminMenu, state: FSMC
         return
     if callback_data.action == "admins":
         await state.clear()
-        await callback.message.answer(await _admins_text(), reply_markup=admins_kb(await _admins_rows()))
+        text, kb = await _admins_view(callback.from_user.id)
+        await callback.message.answer(text, reply_markup=kb)
 
 
 @router.callback_query(AdminPage.filter())
@@ -557,14 +558,26 @@ async def _admins_rows() -> list[tuple[int, str, bool]]:
     return rows
 
 
-async def _admins_text() -> str:
+async def _admins_text(actor_id: int | None = None) -> str:
     total = len(admins.all_admin_ids())
-    return (
-        "👑 <b>Adminlar</b>\n"
-        f"Jami: <b>{total}</b> ta\n\n"
-        "⭐ — asosiy admin (o‘chirib bo‘lmaydi). Yangi admin qo‘shish uchun "
-        "«➕ Admin qo‘shish» tugmasini bosing."
-    )
+    lines = [
+        "👑 <b>Adminlar</b>",
+        f"Jami: <b>{total}</b> ta",
+        "",
+        "⭐ — asosiy admin (o‘chirib bo‘lmaydi).",
+    ]
+    if actor_id is not None and admins.is_primary_admin(actor_id):
+        lines.append("Yangi admin qo‘shish uchun «➕ Admin qo‘shish» tugmasini bosing.")
+    else:
+        lines.append("ℹ️ Yangi admin qo‘shish faqat asosiy adminga ruxsat etilgan.")
+    return "\n".join(lines)
+
+
+async def _admins_view(actor_id: int):
+    """(text, keyboard) for the admins screen — the add button and hint only
+    appear for the primary admin, who alone may add new admins."""
+    can_add = admins.is_primary_admin(actor_id)
+    return await _admins_text(actor_id), admins_kb(await _admins_rows(), can_add=can_add)
 
 
 def _extract_user_id(message: Message) -> int | None:
@@ -586,11 +599,16 @@ def _extract_user_id(message: Message) -> int | None:
 async def on_admins_back(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     await state.clear()
-    await callback.message.answer(await _admins_text(), reply_markup=admins_kb(await _admins_rows()))
+    text, kb = await _admins_view(callback.from_user.id)
+    await callback.message.answer(text, reply_markup=kb)
 
 
 @router.callback_query(AdminMgmt.filter(F.action == "add"))
 async def on_admin_add_prompt(callback: CallbackQuery, state: FSMContext) -> None:
+    # Only the primary (super) admin may add new admins.
+    if not admins.is_primary_admin(callback.from_user.id):
+        await callback.answer("Faqat asosiy admin yangi admin qo‘sha oladi.", show_alert=True)
+        return
     await callback.answer()
     await state.set_state(AddAdmin.waiting)
     await callback.message.answer(
@@ -606,6 +624,13 @@ async def on_admin_add_prompt(callback: CallbackQuery, state: FSMContext) -> Non
 
 @router.message(AddAdmin.waiting)
 async def on_admin_add(message: Message, state: FSMContext) -> None:
+    # Defense in depth: even if someone reaches this state, only the primary
+    # admin is allowed to actually add an admin.
+    if not admins.is_primary_admin(message.from_user.id):
+        await state.clear()
+        await message.answer("Faqat asosiy admin yangi admin qo‘sha oladi.")
+        return
+
     user_id = _extract_user_id(message)
     if user_id is None:
         await message.answer(
@@ -618,13 +643,15 @@ async def on_admin_add(message: Message, state: FSMContext) -> None:
         await state.clear()
         who = "asosiy admin" if admins.is_primary_admin(user_id) else "admin"
         await message.answer(f"Bu foydalanuvchi allaqachon {who}.")
-        await message.answer(await _admins_text(), reply_markup=admins_kb(await _admins_rows()))
+        text, kb = await _admins_view(message.from_user.id)
+        await message.answer(text, reply_markup=kb)
         return
 
     await admins.add(user_id, added_by=message.from_user.id)
     await state.clear()
     await message.answer(f"✅ Yangi admin qo‘shildi: <b>{await _admin_label(user_id)}</b>")
-    await message.answer(await _admins_text(), reply_markup=admins_kb(await _admins_rows()))
+    text, kb = await _admins_view(message.from_user.id)
+    await message.answer(text, reply_markup=kb)
 
 
 @router.callback_query(AdminMgmt.filter(F.action == "remove"))
@@ -646,4 +673,5 @@ async def on_admin_remove_confirm(callback: CallbackQuery, callback_data: AdminM
         return
     ok = await admins.remove(callback_data.user_id)
     await callback.answer("Olib tashlandi" if ok else "Topilmadi", show_alert=True)
-    await callback.message.answer(await _admins_text(), reply_markup=admins_kb(await _admins_rows()))
+    text, kb = await _admins_view(callback.from_user.id)
+    await callback.message.answer(text, reply_markup=kb)

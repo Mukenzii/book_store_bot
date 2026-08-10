@@ -267,9 +267,10 @@ def scheduled_confirm_delete_kb(post_id: int) -> InlineKeyboardMarkup:
 
 # --- admin-management keyboards ----------------------------------------------
 
-def admins_kb(rows_data: list[tuple[int, str, bool]]) -> InlineKeyboardMarkup:
+def admins_kb(rows_data: list[tuple[int, str, bool]], can_add: bool = True) -> InlineKeyboardMarkup:
     """rows_data: list of (user_id, label, is_primary). Primary admins (from
-    ADMIN_IDS) are shown with a star and can't be removed."""
+    ADMIN_IDS) are shown with a star and can't be removed. `can_add` shows the
+    'add admin' button — only the primary admin is allowed to add new admins."""
     rows = []
     for user_id, label, is_primary in rows_data:
         if is_primary:
@@ -281,7 +282,8 @@ def admins_kb(rows_data: list[tuple[int, str, bool]]) -> InlineKeyboardMarkup:
                 text=f"🗑 {label}"[:64],
                 callback_data=AdminMgmt(action="remove", user_id=user_id).pack(),
             )])
-    rows.append([InlineKeyboardButton(text="➕ Admin qo‘shish", callback_data=AdminMgmt(action="add").pack())])
+    if can_add:
+        rows.append([InlineKeyboardButton(text="➕ Admin qo‘shish", callback_data=AdminMgmt(action="add").pack())])
     rows.append([InlineKeyboardButton(text="🔙 Menyu", callback_data=AdminMenu(action="menu").pack())])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
