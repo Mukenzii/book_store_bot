@@ -274,12 +274,15 @@ def admins_kb(rows_data: list[tuple[int, str, bool]], can_add: bool = True) -> I
     rows = []
     for user_id, label, is_primary in rows_data:
         if is_primary:
-            rows.append([InlineKeyboardButton(text=f"⭐ {label}"[:64], callback_data=AdminMgmt(action="back").pack())])
-        else:
-            # One row = one full-width button; tapping it opens the remove
-            # confirmation, so the 🗑 label signals what the tap does.
+            # The one super admin — a plain text tag, no emoji, can't be removed.
             rows.append([InlineKeyboardButton(
-                text=f"🗑 {label}"[:64],
+                text=f"{label} (asosiy)"[:64],
+                callback_data=AdminMgmt(action="back").pack(),
+            )])
+        else:
+            # Regular admin — tapping opens the remove confirmation.
+            rows.append([InlineKeyboardButton(
+                text=label[:64],
                 callback_data=AdminMgmt(action="remove", user_id=user_id).pack(),
             )])
     if can_add:

@@ -29,6 +29,16 @@ def all_admin_ids() -> set[int]:
     return settings.admin_id_set | _db_admins
 
 
+def primary_ids() -> set[int]:
+    """Super admins, configured via ADMIN_IDS — can't be removed in the bot."""
+    return set(settings.admin_id_set)
+
+
+def regular_ids() -> set[int]:
+    """Admins added through the bot (excluding any that are also super admins)."""
+    return _db_admins - settings.admin_id_set
+
+
 async def add(user_id: int, added_by: int | None) -> bool:
     added = await repo.add_admin(user_id, added_by)
     if added:

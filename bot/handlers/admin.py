@@ -559,12 +559,15 @@ async def _admins_rows() -> list[tuple[int, str, bool]]:
 
 
 async def _admins_text(actor_id: int | None = None) -> str:
-    total = len(admins.all_admin_ids())
+    primary = len(admins.primary_ids())
+    regular = len(admins.regular_ids())
     lines = [
         "👑 <b>Adminlar</b>",
-        f"Jami: <b>{total}</b> ta",
+        f"Asosiy (super) admin: <b>{primary}</b> ta",
+        f"Oddiy adminlar: <b>{regular}</b> ta",
         "",
-        "⭐ — asosiy admin (o‘chirib bo‘lmaydi).",
+        "«asosiy» — super admin, o‘chirib bo‘lmaydi.",
+        "Oddiy adminni o‘chirish uchun ismi ustiga bosing.",
     ]
     if actor_id is not None and admins.is_primary_admin(actor_id):
         lines.append("Yangi admin qo‘shish uchun «➕ Admin qo‘shish» tugmasini bosing.")
