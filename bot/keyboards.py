@@ -275,10 +275,12 @@ def admins_kb(rows_data: list[tuple[int, str, bool]]) -> InlineKeyboardMarkup:
         if is_primary:
             rows.append([InlineKeyboardButton(text=f"⭐ {label}"[:64], callback_data=AdminMgmt(action="back").pack())])
         else:
-            rows.append([
-                InlineKeyboardButton(text=label[:56], callback_data=AdminMgmt(action="back").pack()),
-                InlineKeyboardButton(text="🗑", callback_data=AdminMgmt(action="remove", user_id=user_id).pack()),
-            ])
+            # One row = one full-width button; tapping it opens the remove
+            # confirmation, so the 🗑 label signals what the tap does.
+            rows.append([InlineKeyboardButton(
+                text=f"🗑 {label}"[:64],
+                callback_data=AdminMgmt(action="remove", user_id=user_id).pack(),
+            )])
     rows.append([InlineKeyboardButton(text="➕ Admin qo‘shish", callback_data=AdminMgmt(action="add").pack())])
     rows.append([InlineKeyboardButton(text="🔙 Menyu", callback_data=AdminMenu(action="menu").pack())])
     return InlineKeyboardMarkup(inline_keyboard=rows)

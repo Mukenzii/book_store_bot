@@ -18,53 +18,13 @@ import csv
 import io
 import re
 import sys
-import urllib.parse
-import urllib.request
 
 from sqlalchemy import text
 
 from bot.config import settings
 from bot.database import engine, session_factory
+from bot.geo import extract_coords, resolve as _resolve
 from bot.models import Base, Store
-
-_DMS = re.compile(r'(\d+)°(\d+)\'([\d.]+)"([NS]).{0,4}?(\d+)°(\d+)\'([\d.]+)"([EW])')
-
-
-def _dms(d: str, m: str, s: str, hemi: str) -> float:
-    v = float(d) + float(m) / 60 + float(s) / 3600
-    return -v if hemi in ("S", "W") else v
-
-
-def extract_coords(url: str) -> tuple[float, float] | None:
-    """Pull (lat, lon) out of any of the map-link formats we've seen."""
-    if not url:
-        return None
-    u = urllib.parse.unquote(url)
-    m = re.search(r'[?&](?:q|ll)=(-?\d+\.\d+),\s*(-?\d+\.\d+)', u)
-    if m:
-        return float(m.group(1)), float(m.group(2))
-    m = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', u)
-    if m:
-        return float(m.group(1)), float(m.group(2))
-    m = re.search(r'/search/(-?\d+\.\d+),\s*\+?(-?\d+\.\d+)', u)
-    if m:
-        return float(m.group(1)), float(m.group(2))
-    m = _DMS.search(u)
-    if m:
-        return _dms(*m.group(1, 2, 3, 4)), _dms(*m.group(5, 6, 7, 8))
-    m = re.search(r'@(-?\d+\.\d+),(-?\d+\.\d+)', u)
-    if m:
-        return float(m.group(1)), float(m.group(2))
-    return None
-
-
-def _resolve(url: str) -> str:
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            return resp.geturl()
-    except Exception:
-        return url
 
 
 def _coords_from_cell(loc: str) -> tuple[float, float] | None:

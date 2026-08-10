@@ -36,8 +36,8 @@ from bot.keyboards import (
     scheduled_confirm_delete_kb,
     scheduled_list_kb,
     scheduled_post_kb,
-    send_location_kb,
 )
+from bot import geo
 from bot import repository as repo
 from bot.states import AddAdmin, AddPost, AddStore, Broadcast, EditStore
 
@@ -58,6 +58,21 @@ FIELD_LABELS = {
 }
 # Maps the short field key to the actual Store column name.
 FIELD_COLUMN = {"hours": "working_hours"}
+
+# Admins paste a map link instead of sharing a live location — bots can only
+# share their *own* location, and copy-pasting a Google Maps link is what the
+# store owners actually send.
+_LOCATION_PROMPT = (
+    "📍 Do‘kon joylashuvining <b>havolasini</b> yuboring.\n\n"
+    "Google Maps’da nuqtani belgilab, «Ulashish → Havolani nusxalash» qiling "
+    "va shu yerga tashlang. <code>41.311081, 69.240562</code> ko‘rinishidagi "
+    "koordinatani ham qabul qilamiz."
+)
+_LOCATION_INVALID = (
+    "❌ Havoladan koordinata topilmadi. To‘liq Google Maps havolasini "
+    "(masalan <code>https://maps.app.goo.gl/…</code> yoki <code>…/@41.31,69.24…</code>) "
+    "yoki <code>lat, lon</code> ko‘rinishidagi koordinatani yuboring."
+)
 
 
 def _col(field: str) -> str:
@@ -200,9 +215,7 @@ async def on_edit_field(callback: CallbackQuery, callback_data: AdminField, stat
     await state.update_data(store_id=callback_data.store_id, field=callback_data.field)
 
     if callback_data.field == "location":
-        await callback.message.answer(
-            "Yangi <b>joylashuvni</b> yuboring:", reply_markup=send_location_kb()
-        )
+        await callback.message.answer(_LOCATION_PROMPT, reply_markup=ReplyKeyboardRemove())
     else:
         label = FIELD_LABELS[callback_data.field]
         await callback.message.answer(
@@ -211,26 +224,24 @@ async def on_edit_field(callback: CallbackQuery, callback_data: AdminField, stat
         )
 
 
-@router.message(EditStore.value, F.location)
-async def on_edit_location(message: Message, state: FSMContext) -> None:
-    data = await state.get_data()
-    await repo.update_store(
-        data["store_id"],
-        latitude=message.location.latitude,
-        longitude=message.location.longitude,
-    )
-    await state.clear()
-    store = await repo.get_store_by_id(data["store_id"])
-    await message.answer("✅ Joylashuv yangilandi.", reply_markup=ReplyKeyboardRemove())
-    await message.answer(format_store_admin(store), reply_markup=admin_store_kb(store.id))
-
-
 @router.message(EditStore.value, F.text)
 async def on_edit_value(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     field = data["field"]
     if field == "location":
-        await message.answer("Iltimos, 📍 tugma orqali joylashuv yuboring.")
+        coords = await geo.coords_from_link(message.text)
+        if coords is None:
+            await message.answer(_LOCATION_INVALID)
+            return
+        lat, lon = coords
+        await repo.update_store(data["store_id"], latitude=lat, longitude=lon)
+        await state.clear()
+        store = await repo.get_store_by_id(data["store_id"])
+        await message.answer(
+            f"✅ Joylashuv yangilandi: <code>{lat:.6f}, {lon:.6f}</code>",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        await message.answer(format_store_admin(store), reply_markup=admin_store_kb(store.id))
         return
 
     value = _clean(message.text)
@@ -255,14 +266,20 @@ async def add_name(message: Message, state: FSMContext) -> None:
         return
     await state.update_data(name=name)
     await state.set_state(AddStore.location)
-    await message.answer("📍 Do‘kon <b>joylashuvini</b> yuboring:", reply_markup=send_location_kb())
+    await message.answer(_LOCATION_PROMPT, reply_markup=ReplyKeyboardRemove())
 
 
-@router.message(AddStore.location, F.location)
+@router.message(AddStore.location, F.text)
 async def add_location(message: Message, state: FSMContext) -> None:
-    await state.update_data(lat=message.location.latitude, lon=message.location.longitude)
+    coords = await geo.coords_from_link(message.text)
+    if coords is None:
+        await message.answer(_LOCATION_INVALID)
+        return
+    lat, lon = coords
+    await state.update_data(lat=lat, lon=lon)
     await state.set_state(AddStore.phone)
     await message.answer(
+        f"✅ Koordinata olindi: <code>{lat:.6f}, {lon:.6f}</code>\n\n"
         "☎️ <b>Telefon</b> raqamini kiriting (bo‘sh qoldirish uchun «-»):",
         reply_markup=ReplyKeyboardRemove(),
     )
@@ -270,7 +287,7 @@ async def add_location(message: Message, state: FSMContext) -> None:
 
 @router.message(AddStore.location)
 async def add_location_invalid(message: Message) -> None:
-    await message.answer("Iltimos, 📍 tugma orqali joylashuv yuboring.", reply_markup=send_location_kb())
+    await message.answer(_LOCATION_INVALID)
 
 
 @router.message(AddStore.phone, F.text)
