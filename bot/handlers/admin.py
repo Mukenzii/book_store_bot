@@ -45,7 +45,15 @@ from bot.keyboards import (
 )
 from bot import geo
 from bot import repository as repo
-from bot.states import AddAdmin, AddBook, AddPost, AddStore, Broadcast, EditStore
+from bot.states import (
+    AddAdmin,
+    AddBook,
+    AddPost,
+    AddStore,
+    Broadcast,
+    EditHouseInfo,
+    EditStore,
+)
 
 # Every handler here is gated to admins for both messages and callbacks.
 router = Router()
@@ -728,6 +736,38 @@ async def on_books_menu(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     await state.clear()
     await callback.message.answer(await _books_menu_text(), reply_markup=books_menu_kb())
+
+
+@router.callback_query(BookMenu.filter(F.action == "house"))
+async def on_house_info(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    from bot.ai import HOUSE_INFO_KEY, _DEFAULT_HOUSE_INFO
+
+    current = await repo.get_setting(HOUSE_INFO_KEY, _DEFAULT_HOUSE_INFO)
+    await state.set_state(EditHouseInfo.value)
+    await callback.message.answer(
+        "🏛 <b>Nashriyot haqida (AI kontekst)</b>\n\n"
+        "Bu matn AI yordamchiga har bir savolda beriladi — nashriyotingiz kimligini, "
+        "qadriyatlaringizni, yetkazib berish/aloqa kabi ma’lumotlarni shu yerga yozing.\n\n"
+        "<b>Hozirgi matn:</b>\n"
+        f"<i>{_escape(current)}</i>\n\n"
+        "Yangi matnni yuboring (bekor qilish uchun /cancel):",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+@router.message(EditHouseInfo.value, F.text)
+async def on_house_info_save(message: Message, state: FSMContext) -> None:
+    from bot.ai import HOUSE_INFO_KEY
+
+    text = message.text.strip()
+    if not text:
+        await message.answer("Matn bo‘sh bo‘lishi mumkin emas. Qaytadan yuboring:")
+        return
+    await repo.set_setting(HOUSE_INFO_KEY, text)
+    await state.clear()
+    await message.answer("✅ Nashriyot ma’lumoti yangilandi. AI endi shu kontekstdan foydalanadi.")
+    await message.answer(await _books_menu_text(), reply_markup=books_menu_kb())
 
 
 @router.callback_query(BookMenu.filter(F.action == "list"))

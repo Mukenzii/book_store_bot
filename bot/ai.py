@@ -29,12 +29,21 @@ _CANT = (
     "so‘rasangiz, yordam beraman."
 )
 
-# The publishing-house persona. Kept in one place so its "voice" is consistent.
-_HOUSE = (
+# The role instruction — the assistant's job. Fixed.
+_ROLE = (
     "Sen — «Falaq Nashr» nashriyotining kitob bo‘yicha maslahatchisisan. "
     "Vazifang: mijozlarga faqat bizning katalogimizdagi kitoblar asosida "
     "yordam berish — kitob tavsiya qilish, mazmuni, narxi, muallifi va mavjudligi "
     "haqida ma’lumot berish."
+)
+
+# The publishing-house context — WHO we are. Admins edit this from the bot
+# (📖 Kitoblar → 🏛 Nashriyot haqida); until they do, this default is used.
+HOUSE_INFO_KEY = "ai_house_info"
+_DEFAULT_HOUSE_INFO = (
+    "«Falaq Nashr» — O‘zbekistonda faoliyat yurituvchi nashriyot. Biz badiiy, "
+    "bolalar, ta’limiy va ma’naviy adabiyotlarni nashr etamiz va sotamiz. "
+    "Mijozlarga kitob tanlashda samimiy, ochiq va foydali munosabatda bo‘lamiz."
 )
 
 _RULES = (
@@ -86,9 +95,12 @@ def _format_book(b: Book) -> str:
     return " | ".join(parts)
 
 
-def _system_prompt(books: list[Book]) -> str:
+def _system_prompt(books: list[Book], house_info: str) -> str:
     catalog = "\n".join(_format_book(b) for b in books) if books else "(katalog bo‘sh)"
-    return f"{_HOUSE}{_RULES}\n\nKATALOG:\n{catalog}"
+    return (
+        f"{_ROLE}\n\nNASHRIYOT HAQIDA:\n{house_info}"
+        f"{_RULES}\n\nKATALOG:\n{catalog}"
+    )
 
 
 async def answer_question(question: str, books: list[Book]) -> str:
@@ -99,13 +111,16 @@ async def answer_question(question: str, books: list[Book]) -> str:
 
     # Imported here so a missing SDK never breaks import of this module.
     from openai import APIError, RateLimitError
+    from bot import repository as repo
+
+    house_info = await repo.get_setting(HOUSE_INFO_KEY, _DEFAULT_HOUSE_INFO)
 
     try:
         resp = await client.chat.completions.create(
             model=settings.ai_model,
             max_tokens=settings.ai_max_tokens,
             messages=[
-                {"role": "system", "content": _system_prompt(books)},
+                {"role": "system", "content": _system_prompt(books, house_info)},
                 {"role": "user", "content": question},
             ],
         )

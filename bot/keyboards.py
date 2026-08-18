@@ -174,6 +174,7 @@ def books_menu_kb() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="➕ Kitob qo‘shish", callback_data=BookMenu(action="add").pack())],
             [InlineKeyboardButton(text="📚 Kitoblar ro‘yxati", callback_data=BookMenu(action="list").pack())],
+            [InlineKeyboardButton(text="🏛 Nashriyot haqida (AI kontekst)", callback_data=BookMenu(action="house").pack())],
             [InlineKeyboardButton(text="🔙 Menyu", callback_data=AdminMenu(action="menu").pack())],
         ]
     )

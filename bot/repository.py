@@ -326,6 +326,24 @@ async def sample_books(limit: int) -> list[Book]:
         return list(result)
 
 
+# --- generic key/value settings ----------------------------------------------
+
+async def get_setting(key: str, default: str | None = None) -> str | None:
+    async with session_factory() as session:
+        setting = await session.get(Setting, key)
+        return setting.value if setting and setting.value else default
+
+
+async def set_setting(key: str, value: str) -> None:
+    async with session_factory() as session:
+        setting = await session.get(Setting, key)
+        if setting is None:
+            session.add(Setting(key=key, value=value))
+        else:
+            setting.value = value
+        await session.commit()
+
+
 # --- weekly schedule: enabled days + scheduled posts -------------------------
 
 _SCHEDULE_DAYS_KEY = "schedule_weekdays"

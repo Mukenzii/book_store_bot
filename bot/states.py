@@ -59,3 +59,9 @@ class AddBook(StatesGroup):
     genre = State()
     price = State()
     annotation = State()
+
+
+class EditHouseInfo(StatesGroup):
+    """Admin flow for editing the publishing-house context the AI is given."""
+
+    value = State()
