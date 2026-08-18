@@ -75,10 +75,12 @@ def _get_client():
     if _client is None:
         from openai import AsyncOpenAI  # imported lazily so the bot runs without the SDK/key
 
-        kwargs = {"api_key": settings.openai_api_key}
-        if settings.openai_base_url.strip():
-            kwargs["base_url"] = settings.openai_base_url.strip()
-        _client = AsyncOpenAI(**kwargs)
+        # Always pass an explicit base_url. The SDK also reads OPENAI_BASE_URL
+        # from the env, and an EMPTY value there ("OPENAI_BASE_URL=") is used
+        # verbatim — producing schemeless request URLs and a confusing
+        # "Connection error". Passing it here overrides that and defaults sanely.
+        base_url = settings.openai_base_url.strip() or "https://api.openai.com/v1"
+        _client = AsyncOpenAI(api_key=settings.openai_api_key, base_url=base_url)
     return _client
 
 
