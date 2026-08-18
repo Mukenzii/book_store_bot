@@ -43,3 +43,19 @@ class AddAdmin(StatesGroup):
     """Admin flow for granting admin rights to another user."""
 
     waiting = State()   # waiting for an id / forwarded message / shared contact
+
+
+class AiChat(StatesGroup):
+    """User is chatting with the AI book assistant; text goes to Claude."""
+
+    active = State()
+
+
+class AddBook(StatesGroup):
+    """Admin flow for adding a book to the catalogue (title is required)."""
+
+    title = State()
+    author = State()
+    genre = State()
+    price = State()
+    annotation = State()

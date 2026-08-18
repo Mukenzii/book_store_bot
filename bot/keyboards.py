@@ -73,21 +73,49 @@ class AdminMgmt(CallbackData, prefix="admgmt"):
     user_id: int = 0
 
 
+class BookMenu(CallbackData, prefix="bk"):
+    action: str  # list | add | menu
+
+
+class BookItem(CallbackData, prefix="bki"):
+    action: str  # view | delete | confirmdel
+    book_id: int
+
+
 PAGE_SIZE = 8
 
 
-def request_location_kb() -> ReplyKeyboardMarkup:
-    """Reply keyboard with a native 'share location' button.
+# Reply-button captions matched by the AI-assistant handlers.
+AI_ENTER_TEXT = "🤖 Kitoblar bo‘yicha yordam"
+AI_EXIT_TEXT = "⬅️ Chiqish"
 
-    one_time_keyboard=False so the button stays visible — the user can keep
-    sending new locations without it ever disappearing.
+
+def request_location_kb() -> ReplyKeyboardMarkup:
+    """Reply keyboard with 'share location' + 'ask the AI about books'.
+
+    one_time_keyboard=False so the buttons stay visible — the user can keep
+    sending new locations (or open the assistant) without them disappearing.
     """
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="📍 Joylashuvni yuborish", request_location=True)]],
+        keyboard=[
+            [KeyboardButton(text="📍 Joylashuvni yuborish", request_location=True)],
+            [KeyboardButton(text=AI_ENTER_TEXT)],
+        ],
         resize_keyboard=True,
         one_time_keyboard=False,
         is_persistent=True,
-        input_field_placeholder="Joylashuvni ulashish uchun tugmani bosing",
+        input_field_placeholder="Joylashuv yuboring yoki kitob bo‘yicha savol bering",
+    )
+
+
+def ai_chat_kb() -> ReplyKeyboardMarkup:
+    """Keyboard shown while chatting with the assistant — just an exit button."""
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=AI_EXIT_TEXT)]],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+        is_persistent=True,
+        input_field_placeholder="Kitob haqida savolingizni yozing…",
     )
 
 
@@ -133,9 +161,52 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="➕ Do‘kon qo‘shish", callback_data=AdminMenu(action="add").pack())],
             [InlineKeyboardButton(text="📋 Do‘konlar ro‘yxati", callback_data=AdminMenu(action="list").pack())],
             [InlineKeyboardButton(text="📢 Hammaga xabar yuborish", callback_data=AdminMenu(action="broadcast").pack())],
+            [InlineKeyboardButton(text="📖 Kitoblar (AI)", callback_data=AdminMenu(action="books").pack())],
             [InlineKeyboardButton(text="📅 Rejalashtirilgan postlar", callback_data=AdminMenu(action="schedule").pack())],
             [InlineKeyboardButton(text="👑 Adminlar", callback_data=AdminMenu(action="admins").pack())],
             [InlineKeyboardButton(text="✖️ Yopish", callback_data=AdminMenu(action="close").pack())],
+        ]
+    )
+
+
+def books_menu_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Kitob qo‘shish", callback_data=BookMenu(action="add").pack())],
+            [InlineKeyboardButton(text="📚 Kitoblar ro‘yxati", callback_data=BookMenu(action="list").pack())],
+            [InlineKeyboardButton(text="🔙 Menyu", callback_data=AdminMenu(action="menu").pack())],
+        ]
+    )
+
+
+def books_list_kb(books: list) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(
+            text=f"#{b.id} · {b.title}"[:60],
+            callback_data=BookItem(action="view", book_id=b.id).pack(),
+        )]
+        for b in books
+    ]
+    rows.append([InlineKeyboardButton(text="🔙 Kitoblar menyusi", callback_data=BookMenu(action="menu").pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def book_view_kb(book_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🗑 O‘chirish", callback_data=BookItem(action="delete", book_id=book_id).pack())],
+            [InlineKeyboardButton(text="🔙 Ro‘yxat", callback_data=BookMenu(action="list").pack())],
+        ]
+    )
+
+
+def book_confirm_delete_kb(book_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Ha, o‘chirilsin", callback_data=BookItem(action="confirmdel", book_id=book_id).pack()),
+                InlineKeyboardButton(text="❌ Yo‘q", callback_data=BookItem(action="view", book_id=book_id).pack()),
+            ]
         ]
     )
 

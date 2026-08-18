@@ -1,10 +1,11 @@
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import text
 
 from bot.database import session_factory
-from bot.models import Admin, ScheduledPost, Setting, Store, User
+from bot.models import Admin, Book, ScheduledPost, Setting, Store, User
 
 
 @dataclass(slots=True)
@@ -242,6 +243,87 @@ async def count_active_within(minutes: int) -> int:
         return await session.scalar(
             select(func.count()).select_from(User).where(User.last_seen >= cutoff)
         ) or 0
+
+
+# --- books (catalogue the AI assistant answers from) ------------------------
+
+async def create_book(**fields) -> Book:
+    async with session_factory() as session:
+        book = Book(**fields)
+        session.add(book)
+        await session.commit()
+        await session.refresh(book)
+        return book
+
+
+async def get_book_by_id(book_id: int) -> Book | None:
+    async with session_factory() as session:
+        return await session.get(Book, book_id)
+
+
+async def list_books(limit: int, offset: int) -> list[Book]:
+    from sqlalchemy import select
+
+    async with session_factory() as session:
+        result = await session.scalars(
+            select(Book).order_by(Book.id).limit(limit).offset(offset)
+        )
+        return list(result)
+
+
+async def delete_book(book_id: int) -> bool:
+    async with session_factory() as session:
+        book = await session.get(Book, book_id)
+        if book is None:
+            return False
+        await session.delete(book)
+        await session.commit()
+        return True
+
+
+async def count_books() -> int:
+    from sqlalchemy import func, select
+
+    async with session_factory() as session:
+        return await session.scalar(select(func.count()).select_from(Book)) or 0
+
+
+async def search_books(query: str, limit: int) -> list[Book]:
+    """Keyword retrieval for RAG: rows whose title/author/genre/tags/annotation
+    match any word in the question. In-stock books first. This is the simple
+    retrieval layer — swap in embeddings/pgvector here when the catalogue grows."""
+    from sqlalchemy import or_, select
+
+    words = [w for w in re.split(r"\s+", (query or "").strip()) if len(w) >= 3][:8]
+    if not words:
+        return []
+    conds = []
+    for w in words:
+        like = f"%{w}%"
+        conds.extend([
+            Book.title.ilike(like),
+            Book.author.ilike(like),
+            Book.genre.ilike(like),
+            Book.tags.ilike(like),
+            Book.annotation.ilike(like),
+        ])
+    async with session_factory() as session:
+        result = await session.scalars(
+            select(Book).where(or_(*conds)).order_by(Book.in_stock.desc(), Book.id).limit(limit)
+        )
+        return list(result)
+
+
+async def sample_books(limit: int) -> list[Book]:
+    """A breadth-first slice of the catalogue, used when a question matches
+    nothing so the assistant can still recommend from what's in stock."""
+    from sqlalchemy import select
+
+    async with session_factory() as session:
+        result = await session.scalars(
+            select(Book).order_by(Book.in_stock.desc(), Book.id).limit(limit)
+        )
+        return list(result)
 
 
 # --- weekly schedule: enabled days + scheduled posts -------------------------

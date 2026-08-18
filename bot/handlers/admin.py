@@ -18,6 +18,8 @@ from bot.keyboards import (
     AdminMgmt,
     AdminPage,
     AdminStore,
+    BookItem,
+    BookMenu,
     BroadcastCB,
     SchedDay,
     SchedMenu,
@@ -29,6 +31,10 @@ from bot.keyboards import (
     admin_remove_confirm_kb,
     admin_store_kb,
     admins_kb,
+    book_confirm_delete_kb,
+    book_view_kb,
+    books_list_kb,
+    books_menu_kb,
     broadcast_confirm_kb,
     schedule_days_kb,
     schedule_menu_kb,
@@ -39,7 +45,7 @@ from bot.keyboards import (
 )
 from bot import geo
 from bot import repository as repo
-from bot.states import AddAdmin, AddPost, AddStore, Broadcast, EditStore
+from bot.states import AddAdmin, AddBook, AddPost, AddStore, Broadcast, EditStore
 
 # Every handler here is gated to admins for both messages and callbacks.
 router = Router()
@@ -171,6 +177,10 @@ async def on_menu(callback: CallbackQuery, callback_data: AdminMenu, state: FSMC
         await state.clear()
         text, kb = await _admins_view(callback.from_user.id)
         await callback.message.answer(text, reply_markup=kb)
+        return
+    if callback_data.action == "books":
+        await state.clear()
+        await callback.message.answer(await _books_menu_text(), reply_markup=books_menu_kb())
 
 
 @router.callback_query(AdminPage.filter())
@@ -678,3 +688,141 @@ async def on_admin_remove_confirm(callback: CallbackQuery, callback_data: AdminM
     await callback.answer("Olib tashlandi" if ok else "Topilmadi", show_alert=True)
     text, kb = await _admins_view(callback.from_user.id)
     await callback.message.answer(text, reply_markup=kb)
+
+
+# --- books (the AI assistant's catalogue) -----------------------------------
+
+from html import escape as _escape  # noqa: E402 — local to the books section
+
+
+async def _books_menu_text() -> str:
+    total = await repo.count_books()
+    status = "✅ yoqilgan" if settings.ai_enabled else "⚠️ o‘chirilgan (ANTHROPIC_API_KEY yo‘q)"
+    return (
+        "📖 <b>Kitoblar katalogi</b>\n"
+        f"Jami: <b>{total}</b> ta kitob\n"
+        f"AI yordamchi: {status}\n\n"
+        "AI yordamchi javoblarini shu katalogdan oladi — yangi kitob qo‘shsangiz, "
+        "u darhol biladi."
+    )
+
+
+def _format_book_admin(b) -> str:
+    def val(x) -> str:
+        return _escape(str(x)) if x not in (None, "") else "—"
+
+    lines = [
+        f"📕 <b>#{b.id} · {_escape(b.title)}</b>",
+        f"✍️ <b>Muallif:</b> {val(b.author)}",
+        f"🏷 <b>Janr:</b> {val(b.genre)}",
+        f"💰 <b>Narx:</b> {val(b.price)}",
+        f"📦 <b>Mavjud:</b> {'ha' if b.in_stock else 'yo‘q'}",
+    ]
+    if b.annotation:
+        lines.append(f"\n{_escape(b.annotation)}")
+    return "\n".join(lines)
+
+
+@router.callback_query(BookMenu.filter(F.action == "menu"))
+async def on_books_menu(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    await state.clear()
+    await callback.message.answer(await _books_menu_text(), reply_markup=books_menu_kb())
+
+
+@router.callback_query(BookMenu.filter(F.action == "list"))
+async def on_books_list(callback: CallbackQuery) -> None:
+    await callback.answer()
+    books = await repo.list_books(PAGE_SIZE, 0)
+    if not books:
+        await callback.message.answer("Hozircha kitob yo‘q. «➕ Kitob qo‘shish» orqali qo‘shing.",
+                                      reply_markup=books_menu_kb())
+        return
+    await callback.message.answer("📚 Kitoblar:", reply_markup=books_list_kb(books))
+
+
+@router.callback_query(BookItem.filter(F.action == "view"))
+async def on_book_view(callback: CallbackQuery, callback_data: BookItem) -> None:
+    await callback.answer()
+    book = await repo.get_book_by_id(callback_data.book_id)
+    if book is None:
+        await callback.message.answer("Bu kitob topilmadi.", reply_markup=books_menu_kb())
+        return
+    await callback.message.answer(_format_book_admin(book), reply_markup=book_view_kb(book.id))
+
+
+@router.callback_query(BookItem.filter(F.action == "delete"))
+async def on_book_delete_prompt(callback: CallbackQuery, callback_data: BookItem) -> None:
+    await callback.answer()
+    await callback.message.answer(
+        "⚠️ Bu kitob o‘chirilsinmi?", reply_markup=book_confirm_delete_kb(callback_data.book_id)
+    )
+
+
+@router.callback_query(BookItem.filter(F.action == "confirmdel"))
+async def on_book_delete_confirm(callback: CallbackQuery, callback_data: BookItem) -> None:
+    ok = await repo.delete_book(callback_data.book_id)
+    await callback.answer("O‘chirildi" if ok else "Topilmadi", show_alert=True)
+    await callback.message.answer(await _books_menu_text(), reply_markup=books_menu_kb())
+
+
+# --- add-book flow (title required; the rest optional via «-») ----------------
+
+@router.callback_query(BookMenu.filter(F.action == "add"))
+async def on_book_add(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    await state.set_state(AddBook.title)
+    await callback.message.answer(
+        "➕ <b>Yangi kitob</b>\n\nKitob <b>nomini</b> kiriting:",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+@router.message(AddBook.title, F.text)
+async def add_book_title(message: Message, state: FSMContext) -> None:
+    title = message.text.strip()
+    if not title:
+        await message.answer("Nom bo‘sh bo‘lishi mumkin emas. Qaytadan kiriting:")
+        return
+    await state.update_data(title=title)
+    await state.set_state(AddBook.author)
+    await message.answer("✍️ <b>Muallif</b>ni kiriting (bo‘sh qoldirish uchun «-»):")
+
+
+@router.message(AddBook.author, F.text)
+async def add_book_author(message: Message, state: FSMContext) -> None:
+    await state.update_data(author=_clean(message.text))
+    await state.set_state(AddBook.genre)
+    await message.answer("🏷 <b>Janr</b>ni kiriting (masalan: badiiy, bolalar, «-» bo‘sh):")
+
+
+@router.message(AddBook.genre, F.text)
+async def add_book_genre(message: Message, state: FSMContext) -> None:
+    await state.update_data(genre=_clean(message.text))
+    await state.set_state(AddBook.price)
+    await message.answer("💰 <b>Narx</b>ni kiriting (masalan: 45 000 so‘m, «-» bo‘sh):")
+
+
+@router.message(AddBook.price, F.text)
+async def add_book_price(message: Message, state: FSMContext) -> None:
+    await state.update_data(price=_clean(message.text))
+    await state.set_state(AddBook.annotation)
+    await message.answer(
+        "📝 <b>Tavsif / annotatsiya</b>ni kiriting — bu AI uchun eng muhim ma’lumot "
+        "(«-» bo‘sh qoldirish):"
+    )
+
+
+@router.message(AddBook.annotation, F.text)
+async def add_book_annotation(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    book = await repo.create_book(
+        title=data["title"],
+        author=data.get("author"),
+        genre=data.get("genre"),
+        price=data.get("price"),
+        annotation=_clean(message.text),
+    )
+    await state.clear()
+    await message.answer("✅ Kitob qo‘shildi!")
+    await message.answer(_format_book_admin(book), reply_markup=book_view_kb(book.id))

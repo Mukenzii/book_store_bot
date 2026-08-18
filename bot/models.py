@@ -59,6 +59,34 @@ class Store(Base):
     longitude: Mapped[float] = mapped_column(Float)
 
 
+class Book(Base):
+    """A book in the catalogue. The AI assistant answers customer questions by
+    retrieving relevant rows from here and passing them to the model as context
+    (RAG) — so keeping this table accurate keeps the assistant accurate."""
+
+    __tablename__ = "books"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(300))
+    author: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    genre: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # The blurb / summary — the richest signal the assistant uses to recommend.
+    annotation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Text, not numeric, so it can hold "45 000 so'm" etc. as the admin typed it.
+    price: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    language: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    age_group: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    isbn: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Comma-separated free-text keywords to widen search matches.
+    tags: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    in_stock: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Setting(Base):
     """Simple key/value store (used for the enabled weekly schedule days)."""
 
