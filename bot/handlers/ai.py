@@ -16,8 +16,10 @@ _INTRO = (
     "• «Bolalar uchun qanday kitoblaringiz bor?»\n"
     "• «Detektiv janridagi kitob tavsiya qiling»\n"
     "• «Falonchi muallifning kitoblari bormi?»\n\n"
-    "Chiqish uchun «⬅️ Chiqish» tugmasini bosing."
+    "Asosiy menyuga qaytish uchun «⬅️ Orqaga» tugmasini bosing."
 )
+
+_BACK = "Asosiy menyu. Joylashuvingizni yuboring 📍 yoki yana AI yordamchini oching 🤖"
 
 _DISABLED = (
     "🤖 AI yordamchi hozircha ulanmagan. Tez orada ishga tushadi — hozircha "
@@ -35,25 +37,34 @@ async def enter_ai(message: Message, state: FSMContext) -> None:
 
 
 @router.message(AiChat.active, F.text == AI_EXIT_TEXT)
-async def exit_ai(message: Message, state: FSMContext) -> None:
+async def back_to_menu(message: Message, state: FSMContext) -> None:
+    # User pressed "Back" — stop the agent and restore the main menu buttons.
     await state.clear()
-    await message.answer(
-        "Asosiy menyuga qaytdingiz. Joylashuvingizni yuboring 📍",
-        reply_markup=request_location_kb(),
-    )
+    await message.answer(_BACK, reply_markup=request_location_kb())
 
 
 @router.message(AiChat.active, F.text & ~F.text.startswith("/"))
-async def ask_ai(message: Message) -> None:
+async def ask_ai(message: Message, state: FSMContext) -> None:
     question = message.text.strip()
     if not question:
         return
-    # Show a typing action while we call the model.
     await message.bot.send_chat_action(message.chat.id, "typing")
+
     books = await repo.search_books(question, settings.ai_max_books)
     if not books:
-        # No keyword match — give the model a slice of the catalogue so it can
+        # No keyword match — hand the model a slice of the catalogue so it can
         # still recommend something rather than drawing a blank.
         books = await repo.sample_books(settings.ai_max_books)
+
     reply = await ai.answer_question(question, books)
+
+    # If the agent decided the user should go to a store, strip the marker,
+    # drop out of AI mode, and bring back the main menu (location button).
+    if ai.STORE_MARKER in reply:
+        cleaned = reply.replace(ai.STORE_MARKER, "").strip()
+        await state.clear()
+        await message.answer(cleaned, reply_markup=request_location_kb())
+        return
+
+    # Otherwise stay in AI mode — the user can keep asking (Back button visible).
     await message.answer(reply, reply_markup=ai_chat_kb())

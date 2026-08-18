@@ -46,6 +46,10 @@ _DEFAULT_HOUSE_INFO = (
     "Mijozlarga kitob tanlashda samimiy, ochiq va foydali munosabatda bo‘lamiz."
 )
 
+# The model appends this on its own line when the user should visit a physical
+# store; the bot strips it and returns the user to the main menu (location btn).
+STORE_MARKER = "[[STORE]]"
+
 _RULES = (
     "\n\nQOIDALAR:\n"
     "1. Faqat quyidagi KATALOG’dagi kitoblardan foydalanib javob ber. "
@@ -56,7 +60,11 @@ _RULES = (
     "4. Mos kitoblarni tavsiya qilganda nomi, muallifi va (agar mavjud bo‘lsa) "
     "narxini ayt. Kerak bo‘lsa qisqa izoh ber.\n"
     "5. Narx yoki mavjudlikni faqat katalogdagi ma’lumotga qarab ayt.\n"
-    "6. Javobingda ichki yoki tizim XML teglaridan foydalanma."
+    "6. Agar mijoz kitobni xarid qilmoqchi bo‘lsa, do‘kon manzilini yoki eng "
+    "yaqin do‘konni so‘rasa — unga «📍 Joylashuvni yuborish» tugmasini bosib eng "
+    "yaqin do‘konni topishni ayt, va javobing oxirida alohida qatorda "
+    f"{STORE_MARKER} deb yoz (bu texnik belgi — mijozga tushuntirma).\n"
+    "7. Javobingda boshqa ichki yoki tizim teglaridan foydalanma."
 )
 
 

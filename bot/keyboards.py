@@ -86,12 +86,12 @@ PAGE_SIZE = 8
 
 
 # Reply-button captions matched by the AI-assistant handlers.
-AI_ENTER_TEXT = "🤖 Kitoblar bo‘yicha yordam"
-AI_EXIT_TEXT = "⬅️ Chiqish"
+AI_ENTER_TEXT = "🤖 AI yordamchi"
+AI_EXIT_TEXT = "⬅️ Orqaga"
 
 
 def request_location_kb() -> ReplyKeyboardMarkup:
-    """Reply keyboard with 'share location' + 'ask the AI about books'.
+    """The main menu keyboard: 'share location' + 'AI assistant'.
 
     one_time_keyboard=False so the buttons stay visible — the user can keep
     sending new locations (or open the assistant) without them disappearing.
@@ -104,18 +104,18 @@ def request_location_kb() -> ReplyKeyboardMarkup:
         resize_keyboard=True,
         one_time_keyboard=False,
         is_persistent=True,
-        input_field_placeholder="Joylashuv yuboring yoki kitob bo‘yicha savol bering",
+        input_field_placeholder="Joylashuv yuboring yoki AI yordamchini oching",
     )
 
 
 def ai_chat_kb() -> ReplyKeyboardMarkup:
-    """Keyboard shown while chatting with the assistant — just an exit button."""
+    """Keyboard shown while chatting with the assistant — just a 'back' button."""
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=AI_EXIT_TEXT)]],
         resize_keyboard=True,
         one_time_keyboard=False,
         is_persistent=True,
-        input_field_placeholder="Kitob haqida savolingizni yozing…",
+        input_field_placeholder="Kitob bo‘yicha savolingizni yozing…",
     )
 
 
