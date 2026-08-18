@@ -18,6 +18,7 @@ import csv
 import io
 import re
 import sys
+import urllib.request
 
 from sqlalchemy import text
 
