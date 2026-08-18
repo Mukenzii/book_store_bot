@@ -697,7 +697,7 @@ from html import escape as _escape  # noqa: E402 — local to the books section
 
 async def _books_menu_text() -> str:
     total = await repo.count_books()
-    status = "✅ yoqilgan" if settings.ai_enabled else "⚠️ o‘chirilgan (ANTHROPIC_API_KEY yo‘q)"
+    status = "✅ yoqilgan" if settings.ai_enabled else "⚠️ o‘chirilgan (OPENAI_API_KEY yo‘q)"
     return (
         "📖 <b>Kitoblar katalogi</b>\n"
         f"Jami: <b>{total}</b> ta kitob\n"

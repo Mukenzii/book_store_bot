@@ -28,13 +28,14 @@ class Settings(BaseSettings):
     # Tashkent = +5 (no DST). The container clock is UTC.
     schedule_tz_offset: int = 5
 
-    # --- AI book assistant (RAG over the books table via the Claude API) ------
-    # Set ANTHROPIC_API_KEY to enable the "ask about our books" AI mode. Empty
+    # --- AI book assistant (RAG over the books table via the OpenAI API) ------
+    # Set OPENAI_API_KEY to enable the "ask about our books" AI mode. Empty
     # => the feature is disabled and the bot still runs normally.
-    anthropic_api_key: str = ""
-    # Model the assistant uses. Default is the latest Opus; override with a
-    # cheaper model (e.g. claude-haiku-4-5 or claude-sonnet-5) to cut cost.
-    ai_model: str = "claude-opus-5"
+    openai_api_key: str = ""
+    # Optional custom base URL (e.g. Azure OpenAI or an OpenAI-compatible proxy).
+    openai_base_url: str = ""
+    # Model the assistant uses. Override with a stronger/cheaper GPT model.
+    ai_model: str = "gpt-4o-mini"
     # Max books passed to the model as context per question (keeps prompts small).
     ai_max_books: int = 40
     # Cap on the model's answer length (tokens).
@@ -42,7 +43,7 @@ class Settings(BaseSettings):
 
     @property
     def ai_enabled(self) -> bool:
-        return bool(self.anthropic_api_key.strip())
+        return bool(self.openai_api_key.strip())
 
     # Webhook mode: set WEBHOOK_URL to the public base URL (e.g.
     # https://falaqnashrcloud.uz) to run via webhook instead of long polling.

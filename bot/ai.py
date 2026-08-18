@@ -1,11 +1,11 @@
 """The AI book assistant: answers customer questions using the books table.
 
 This is Retrieval-Augmented Generation (RAG), not fine-tuning — we pull the
-books relevant to the question out of Postgres and hand them to Claude as
+books relevant to the question out of Postgres and hand them to the model as
 context on every call. New book? Just add a row; the assistant sees it
 immediately, and it can never invent a title or price that isn't in the table.
 
-One Claude API call per question (a single-turn Q&A — no tools, no agent loop).
+One OpenAI Chat Completions call per question (a single-turn Q&A — no tools).
 """
 
 import logging
@@ -56,9 +56,12 @@ def _get_client():
     if not settings.ai_enabled:
         return None
     if _client is None:
-        from anthropic import AsyncAnthropic  # imported lazily so the bot runs without the SDK/key
+        from openai import AsyncOpenAI  # imported lazily so the bot runs without the SDK/key
 
-        _client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        kwargs = {"api_key": settings.openai_api_key}
+        if settings.openai_base_url.strip():
+            kwargs["base_url"] = settings.openai_base_url.strip()
+        _client = AsyncOpenAI(**kwargs)
     return _client
 
 
@@ -89,20 +92,22 @@ def _system_prompt(books: list[Book]) -> str:
 
 
 async def answer_question(question: str, books: list[Book]) -> str:
-    """Ask Claude the customer's question against the retrieved catalogue slice."""
+    """Ask the model the customer's question against the retrieved catalogue slice."""
     client = _get_client()
     if client is None:
         return _DISABLED
 
     # Imported here so a missing SDK never breaks import of this module.
-    from anthropic import APIError, RateLimitError
+    from openai import APIError, RateLimitError
 
     try:
-        resp = await client.messages.create(
+        resp = await client.chat.completions.create(
             model=settings.ai_model,
             max_tokens=settings.ai_max_tokens,
-            system=_system_prompt(books),
-            messages=[{"role": "user", "content": question}],
+            messages=[
+                {"role": "system", "content": _system_prompt(books)},
+                {"role": "user", "content": question},
+            ],
         )
     except RateLimitError:
         return _BUSY
@@ -110,9 +115,9 @@ async def answer_question(question: str, books: list[Book]) -> str:
         logger.warning("AI request failed: %s", exc)
         return _ERROR
 
-    # Safety classifiers can decline; content is empty/partial on a refusal.
-    if resp.stop_reason == "refusal":
+    choice = resp.choices[0]
+    # Newer models expose an explicit refusal field; older ones just return text.
+    if getattr(choice.message, "refusal", None):
         return _CANT
-
-    text = "".join(b.text for b in resp.content if b.type == "text").strip()
+    text = (choice.message.content or "").strip()
     return text or _ERROR

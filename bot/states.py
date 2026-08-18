@@ -46,7 +46,7 @@ class AddAdmin(StatesGroup):
 
 
 class AiChat(StatesGroup):
-    """User is chatting with the AI book assistant; text goes to Claude."""
+    """User is chatting with the AI book assistant; text goes to the model."""
 
     active = State()
 
