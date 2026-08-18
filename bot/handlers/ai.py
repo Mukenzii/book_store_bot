@@ -57,14 +57,5 @@ async def ask_ai(message: Message, state: FSMContext) -> None:
         books = await repo.sample_books(settings.ai_max_books)
 
     reply = await ai.answer_question(question, books)
-
-    # If the agent decided the user should go to a store, strip the marker,
-    # drop out of AI mode, and bring back the main menu (location button).
-    if ai.STORE_MARKER in reply:
-        cleaned = reply.replace(ai.STORE_MARKER, "").strip()
-        await state.clear()
-        await message.answer(cleaned, reply_markup=request_location_kb())
-        return
-
-    # Otherwise stay in AI mode — the user can keep asking (Back button visible).
+    # Stay in AI mode — the user keeps asking until they press "⬅️ Orqaga".
     await message.answer(reply, reply_markup=ai_chat_kb())

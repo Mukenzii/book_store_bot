@@ -46,10 +46,6 @@ _DEFAULT_HOUSE_INFO = (
     "Mijozlarga kitob tanlashda samimiy, ochiq va foydali munosabatda bo‘lamiz."
 )
 
-# The model appends this on its own line when the user should visit a physical
-# store; the bot strips it and returns the user to the main menu (location btn).
-STORE_MARKER = "[[STORE]]"
-
 _RULES = (
     "\n\nQOIDALAR:\n"
     "1. Faqat quyidagi KATALOG’dagi kitoblardan foydalanib javob ber. "
@@ -57,14 +53,12 @@ _RULES = (
     "2. Mijoz so‘ragan kitob katalogda bo‘lmasa, buni ochiq ayt va shu mavzuga "
     "yaqin bor kitoblarni taklif qil.\n"
     "3. Mijozning tilida javob ber (odatda o‘zbekcha). Iliq, samimiy va qisqa yoz.\n"
-    "4. Mos kitoblarni tavsiya qilganda nomi, muallifi va (agar mavjud bo‘lsa) "
-    "narxini ayt. Kerak bo‘lsa qisqa izoh ber.\n"
-    "5. Narx yoki mavjudlikni faqat katalogdagi ma’lumotga qarab ayt.\n"
-    "6. Agar mijoz kitobni xarid qilmoqchi bo‘lsa, do‘kon manzilini yoki eng "
-    "yaqin do‘konni so‘rasa — unga «📍 Joylashuvni yuborish» tugmasini bosib eng "
-    "yaqin do‘konni topishni ayt, va javobing oxirida alohida qatorda "
-    f"{STORE_MARKER} deb yoz (bu texnik belgi — mijozga tushuntirma).\n"
-    "7. Javobingda boshqa ichki yoki tizim teglaridan foydalanma."
+    "4. Mos kitoblarni tavsiya qilganda kitob nomi, muallifi va qisqa izohini ber. "
+    "Mijoz bilan suhbatni davom ettir — u yana savol berishi mumkin.\n"
+    "5. NARX haqida GAPIRMA — narxni aytma, so‘ralsa ham raqam berma.\n"
+    "6. Joylashuv, do‘kon manzili yoki «joylashuvingizni yuboring» kabi narsalarni "
+    "o‘zing taklif qilma. Faqat kitob tavsiya qil.\n"
+    "7. Javobingda ichki yoki tizim teglaridan foydalanma."
 )
 
 
@@ -97,8 +91,8 @@ def _format_book(b: Book) -> str:
         parts.append(f"yosh: {b.age_group}")
     if b.year:
         parts.append(f"yil: {b.year}")
-    if b.price:
-        parts.append(f"narx: {b.price}")
+    # Price is intentionally NOT given to the model — the assistant must not
+    # quote prices to customers (admins still see/manage it in the panel).
     parts.append("mavjud" if b.in_stock else "hozircha yo‘q")
     if b.annotation:
         parts.append(f"tavsif: {b.annotation.strip()}")
