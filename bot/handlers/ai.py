@@ -1,6 +1,9 @@
+import re
+from pathlib import Path
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import FSInputFile, Message
 
 from bot import ai
 from bot import repository as repo
@@ -9,6 +12,16 @@ from bot.keyboards import AI_ENTER_TEXT, AI_EXIT_TEXT, ai_chat_kb, request_locat
 from bot.states import AiChat
 
 router = Router()
+
+# Book info images live here (shipped inside the image via `COPY . .`).
+BOOK_IMAGES_DIR = Path(__file__).resolve().parents[2] / "book_images"
+# How many book images to send per answer (avoid flooding the chat).
+_MAX_IMAGES = 4
+
+
+def _norm(s: str) -> str:
+    """Lowercase and strip punctuation, so title matching ignores «», !, ' etc."""
+    return re.sub(r"[^a-z0-9Ѐ-ӿ]", "", (s or "").lower())
 
 _INTRO = (
     "🤖 <b>Falaq Nashr AI yordamchisi</b>\n\n"
@@ -59,3 +72,22 @@ async def ask_ai(message: Message, state: FSMContext) -> None:
     reply = await ai.answer_question(question, books)
     # Stay in AI mode — the user keeps asking until they press "⬅️ Orqaga".
     await message.answer(reply, reply_markup=ai_chat_kb())
+
+    # Send the info image for each catalogue book the assistant actually named,
+    # so the book details reach the user inside the image.
+    answer_norm = _norm(reply)
+    seen: set[int] = set()
+    sent = 0
+    for b in books:
+        if sent >= _MAX_IMAGES:
+            break
+        if b.id in seen or not b.image or len(_norm(b.title)) < 5:
+            continue
+        if _norm(b.title) in answer_norm:
+            path = BOOK_IMAGES_DIR / b.image
+            if path.is_file():
+                seen.add(b.id)
+                sent += 1
+                await message.answer_photo(
+                    FSInputFile(path), caption=f"📖 <b>{b.title}</b>"
+                )

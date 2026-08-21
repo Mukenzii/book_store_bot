@@ -31,6 +31,9 @@ async def init_db(retries: int = 10, delay: float = 2.0) -> None:
                 await conn.execute(
                     text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(32)")
                 )
+                await conn.execute(
+                    text("ALTER TABLE books ADD COLUMN IF NOT EXISTS image VARCHAR(255)")
+                )
                 # last_seen: add it NULLABLE first, then backfill from
                 # created_at. Adding it with `DEFAULT now()` would stamp every
                 # existing user with the deploy time, making all of them look

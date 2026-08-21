@@ -10,11 +10,19 @@ Usage (inside the container, which has DB access):
 """
 
 import asyncio
+import re
 
 from sqlalchemy import text
 
 from bot.database import engine, session_factory
 from bot.models import Base, Book
+
+
+def _slug(title: str) -> str:
+    """Deterministic filename slug for a book's image (book_images/<slug>.jpg)."""
+    t = title.lower().replace("’", "").replace("‘", "").replace("'", "")
+    t = re.sub(r"[^a-z0-9]+", "-", t).strip("-")
+    return t
 
 BOOKS = [
     dict(
@@ -203,15 +211,23 @@ BOOKS = [
 async def main() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # create_all never ALTERs an existing table — make sure the image column
+        # is present on catalogues created before it was added.
+        await conn.execute(
+            text("ALTER TABLE books ADD COLUMN IF NOT EXISTS image VARCHAR(255)")
+        )
         # Remove whatever is there now (sample/fake data) before loading the real books.
         await conn.execute(text("DELETE FROM books"))
 
     async with session_factory() as session:
-        session.add_all([Book(**b) for b in BOOKS])
+        session.add_all([Book(image=f"{_slug(b['title'])}.jpg", **b) for b in BOOKS])
         await session.commit()
 
     await engine.dispose()
     print(f"Imported {len(BOOKS)} real books (old catalogue removed).")
+    print("Image filenames (place matching files in book_images/):")
+    for b in BOOKS:
+        print(f"  {_slug(b['title'])}.jpg  <-  {b['title']}")
 
 
 if __name__ == "__main__":

@@ -81,6 +81,9 @@ class Book(Base):
     pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Comma-separated free-text keywords to widen search matches.
     tags: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Filename (under book_images/) of the book's info image, sent to the user
+    # when the assistant recommends this book. The image carries the details.
+    image: Mapped[str | None] = mapped_column(String(255), nullable=True)
     in_stock: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
