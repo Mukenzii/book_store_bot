@@ -1,9 +1,10 @@
 import re
+from html import escape
 from pathlib import Path
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import FSInputFile, Message
+from aiogram.types import FSInputFile, InputMediaPhoto, Message
 
 from bot import ai
 from bot import repository as repo
@@ -17,11 +18,18 @@ router = Router()
 BOOK_IMAGES_DIR = Path(__file__).resolve().parents[2] / "book_images"
 # How many book images to send per answer (avoid flooding the chat).
 _MAX_IMAGES = 4
+# Telegram photo/album caption limit.
+_CAPTION_LIMIT = 1024
 
 
 def _norm(s: str) -> str:
     """Lowercase and strip punctuation, so title matching ignores «», !, ' etc."""
     return re.sub(r"[^a-z0-9Ѐ-ӿ]", "", (s or "").lower())
+
+
+def _fmt(text: str) -> str:
+    """Render the model's Markdown-ish **bold** as HTML (the bot uses HTML mode)."""
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", escape(text))
 
 _INTRO = (
     "🤖 <b>Falaq Nashr AI yordamchisi</b>\n\n"
@@ -63,23 +71,21 @@ async def ask_ai(message: Message, state: FSMContext) -> None:
         return
     await message.bot.send_chat_action(message.chat.id, "typing")
 
-    books = await repo.search_books(question, settings.ai_max_books)
-    if not books:
-        # No keyword match — hand the model a slice of the catalogue so it can
-        # still recommend something rather than drawing a blank.
-        books = await repo.sample_books(settings.ai_max_books)
+    # The catalogue is small, so hand the model the WHOLE list every time and let
+    # it pick the genre-appropriate books itself — keyword search returned the
+    # wrong subset for vibe queries like "detective". (When the catalogue grows
+    # past ai_max_books, switch this to semantic retrieval.)
+    books = await repo.sample_books(settings.ai_max_books)
 
     reply = await ai.answer_question(question, books)
-    # Stay in AI mode — the user keeps asking until they press "⬅️ Orqaga".
-    await message.answer(reply, reply_markup=ai_chat_kb())
+    body = _fmt(reply)
 
-    # Send the info image for each catalogue book the assistant actually named,
-    # so the book details reach the user inside the image.
+    # Collect the info images for the catalogue books the assistant actually named.
     answer_norm = _norm(reply)
     seen: set[int] = set()
-    sent = 0
+    images: list[Path] = []
     for b in books:
-        if sent >= _MAX_IMAGES:
+        if len(images) >= _MAX_IMAGES:
             break
         if b.id in seen or not b.image or len(_norm(b.title)) < 5:
             continue
@@ -87,7 +93,27 @@ async def ask_ai(message: Message, state: FSMContext) -> None:
             path = BOOK_IMAGES_DIR / b.image
             if path.is_file():
                 seen.add(b.id)
-                sent += 1
-                await message.answer_photo(
-                    FSInputFile(path), caption=f"📖 <b>{b.title}</b>"
-                )
+                images.append(path)
+
+    # No image → just the text. The text stays in AI mode (Back button visible).
+    if not images:
+        await message.answer(body, reply_markup=ai_chat_kb())
+        return
+
+    # Image(s) + text in ONE message: photo/album with the answer as the caption.
+    fits = len(reply) <= _CAPTION_LIMIT
+    if len(images) == 1:
+        await message.answer_photo(
+            FSInputFile(images[0]),
+            caption=body if fits else None,
+            reply_markup=ai_chat_kb(),
+        )
+    else:
+        media = [
+            InputMediaPhoto(media=FSInputFile(p), caption=body if (i == 0 and fits) else None)
+            for i, p in enumerate(images)
+        ]
+        await message.answer_media_group(media)
+    # Rare fallback: answer too long for a caption — send it as its own message.
+    if not fits:
+        await message.answer(body, reply_markup=ai_chat_kb())
