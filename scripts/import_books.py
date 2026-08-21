@@ -187,7 +187,7 @@ BOOKS = [
                    "tushuntirilgan.",
     ),
     dict(
-        title="Payg‘ambardan maktublar",
+        title="Rasulullohdan maktublar",
         author="Adham Sharqoviy",
         genre="diniy, ma’rifiy",
         pages=432, language="ravon, sodda, badiiy",
