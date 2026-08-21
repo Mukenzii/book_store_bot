@@ -294,7 +294,14 @@ async def search_books(query: str, limit: int) -> list[Book]:
     retrieval layer — swap in embeddings/pgvector here when the catalogue grows."""
     from sqlalchemy import or_, select
 
-    words = [w for w in re.split(r"\s+", (query or "").strip()) if len(w) >= 3][:8]
+    # Strip surrounding punctuation from each token so «La'natlangan and qiz»
+    # (quotes/? attached) still match the plain title/annotation text.
+    words = []
+    for w in re.split(r"\s+", (query or "").strip()):
+        w = re.sub(r"^\W+|\W+$", "", w)
+        if len(w) >= 3:
+            words.append(w)
+    words = words[:8]
     if not words:
         return []
     conds = []
