@@ -75,7 +75,7 @@ BOOKS = [
     ),
     dict(
         title="La’natlangan qiz",
-        author=None,
+        author="Vafo Xasan",
         genre="fantastik, roman",
         pages=232, language="ravon",
         tags="fantastika, roman, adolat, sinov",
