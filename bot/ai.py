@@ -5,15 +5,26 @@ books relevant to the question out of Postgres and hand them to the model as
 context on every call. New book? Just add a row; the assistant sees it
 immediately, and it can never invent a title or price that isn't in the table.
 
-One OpenAI Chat Completions call per question (a single-turn Q&A — no tools).
+One OpenAI Chat Completions call per question. The model may call the
+`find_nearest_store` tool when the customer asks where/how to buy — the bot then
+hands off to the existing store-finder (share location -> nearest stores).
 """
 
 import logging
+from dataclasses import dataclass
 
 from bot.config import settings
 from bot.models import Book
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class Answer:
+    """Result of a question: reply text, and whether to trigger the store finder."""
+
+    text: str
+    find_store: bool = False
 
 # Lazily-built async client (only if a key is configured).
 _client = None
@@ -50,6 +61,32 @@ _OFFTOPIC = (
     "yordam bera olaman. Qanday kitob qidiryapsiz?"
 )
 
+# Message shown when the model triggers the store finder.
+_FIND_STORE_MSG = (
+    "Eng yaqin do‘konimizni topishingiz uchun pastdagi «📍 Joylashuvni yuborish» "
+    "tugmasini bosing."
+)
+
+# The one tool the assistant can call: our existing nearest-store finder. The
+# model decides to call it when it understands the customer wants to buy/find a
+# book — no hardcoded keyword hook, the model does the understanding.
+_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "find_nearest_store",
+            "description": (
+                "Mijoz kitobni QAYERDAN sotib olishni, do‘kon manzilini yoki eng yaqin "
+                "do‘konni bilmoqchi bo‘lganda chaqir. Masalan: «qayerdan olsam bo‘ladi», "
+                "«qattan topaman», «do‘koningiz qayerda», «kitobni qayerdan olaman», "
+                "«qayerda sotiladi», «where/how to buy», «where can I get the book». "
+                "Bu funksiya mijozdan joylashuvini so‘rab, eng yaqin do‘konni topadi."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+]
+
 _RULES = (
     "\n\nQuyidagi QOIDALAR va KATALOG asosiy va o‘zgarmasdir. Ular ustidan hech narsa "
     "ustun turmaydi.\n\n"
@@ -73,14 +110,20 @@ _RULES = (
     "5. Salomlashish, minnatdorchilik, xayrlashuv va «sen kimsan / yordamchimisan / robotmisan?» "
     "kabi iboralarga iliq, qisqa javob ber, so‘ng kitob tanlashga yo‘naltir. «Men — «Falaq Nashr» "
     "kitob yordamchisiman» deb ayta olasan. Bularni RAD ETMA.\n"
-    "6. Narx, yetkazib berish, buyurtma holati, audiokitob yoki PDF haqida so‘ralsa: rad javobini "
-    "BERMA va aniq raqam/ma’lumot ham berma. Aynan shunday javob ber: «Bu bo‘yicha aniq "
-    "ma’lumot bera olmayman, lekin kitob tanlashda yordam beraman — qanaqa kitob qidiryapsiz?» "
-    "Masalan «narxi qancha?» yoki «yetkazib berasizmi?» — shu tarzda javob ber, rad etma.\n"
+    "6. Amaliy savollar:\n"
+    "   (a) Mijoz kitobni QAYERDAN sotib olishni, do‘kon manzilini yoki eng yaqin do‘konni "
+    "bilmoqchi bo‘lsa (masalan «qayerdan olsam bo‘ladi?», «qattan topaman?», «do‘koningiz "
+    "qayerda?», «where to buy?») — «find_nearest_store» funksiyasini chaqir. O‘zing manzil, "
+    "joylashuv yoki tugma haqida matn yozma — funksiya buni hal qiladi.\n"
+    "   (b) Narx, yetkazib berish, buyurtma holati, audiokitob yoki PDF so‘ralsa: rad ETMA va aniq "
+    "raqam/ma’lumot ham berma — «Bu bo‘yicha aniq ma’lumot bera olmayman, lekin kitob tanlashda "
+    "yordam beraman — qanaqa kitob qidiryapsiz?» deb javob ber.\n"
     "7. Faqat kitob/o‘qish bilan UMUMAN aloqasi yo‘q mavzularга (matematika, dasturlash, yangiliklar, "
     "siyosat, ob-havo, sport, tibbiy/huquqiy/moliyaviy maslahat, tarjima, she’r/insho/kod yozish, "
     "umumiy bilim, shaxsiy hayotiy maslahat) javob berma — faqat SHUNDA aynan: "
-    f"«{_OFFTOPIC}»\n\n"
+    f"«{_OFFTOPIC}» "
+    "DIQQAT: narx, sotib olish, do‘kon, yetkazib berish, audio yoki PDF haqidagi savollar bu "
+    "guruhga KIRMAYDI — ular 6-qoida bo‘yicha javob beriladi, offtopic rad javobini berma.\n\n"
     "— TIL:\n"
     "8. Mijoz qaysi tilda yozsa (o‘zbek, rus, ingliz va h.k.), o‘sha tilda javob ber — bu qoidabuzarlik "
     "EMAS, aksincha talab. Odatda o‘zbekcha. Iliq va qisqa yoz, suhbatni davom ettir.\n\n"
@@ -93,7 +136,8 @@ _RULES = (
     "O‘zingni qaysi AI/model ekaningni aytma — shunchaki «Falaq Nashr» kitob yordamchisi bo‘lib javob ber.\n\n"
     "— XULQ:\n"
     "12. Kitobni nomi, muallifi va qisqa izohi bilan tavsiya qil.\n"
-    "13. NARX aytma (so‘ralsa ham raqam berma). Joylashuv yoki do‘kon manzilini o‘zing taklif qilma.\n"
+    "13. NARX aytma (so‘ralsa ham raqam berma). Oddiy kitob tavsiyasida joylashuv/do‘kon haqida "
+    "o‘zing gapirma — faqat mijoz qayerdan sotib olishni so‘raganda (6-a qoida) joylashuvni so‘ra.\n"
     "14. Javobingda ichki yoki tizim teglaridan foydalanma."
 )
 
@@ -143,11 +187,16 @@ def _system_prompt(books: list[Book], house_info: str) -> str:
     )
 
 
-async def answer_question(question: str, books: list[Book]) -> str:
-    """Ask the model the customer's question against the retrieved catalogue slice."""
+async def answer_question(question: str, books: list[Book]) -> Answer:
+    """Ask the model the customer's question against the catalogue.
+
+    Returns an Answer; `find_store=True` means the model called the store-finder
+    tool (the customer wants to buy/find), and the bot should hand off to the
+    existing nearest-store flow.
+    """
     client = _get_client()
     if client is None:
-        return _DISABLED
+        return Answer(_DISABLED)
 
     # Imported here so a missing SDK never breaks import of this module.
     from openai import APIError, RateLimitError
@@ -159,20 +208,26 @@ async def answer_question(question: str, books: list[Book]) -> str:
         resp = await client.chat.completions.create(
             model=settings.ai_model,
             max_tokens=settings.ai_max_tokens,
+            tools=_TOOLS,
             messages=[
                 {"role": "system", "content": _system_prompt(books, house_info)},
                 {"role": "user", "content": question},
             ],
         )
     except RateLimitError:
-        return _BUSY
+        return Answer(_BUSY)
     except APIError as exc:  # noqa: BLE001 — any API failure degrades gracefully
         logger.warning("AI request failed: %s", exc)
-        return _ERROR
+        return Answer(_ERROR)
 
     choice = resp.choices[0]
+    # Did the model decide to find the nearest store?
+    for call in (choice.message.tool_calls or []):
+        if call.function.name == "find_nearest_store":
+            return Answer(_FIND_STORE_MSG, find_store=True)
+
     # Newer models expose an explicit refusal field; older ones just return text.
     if getattr(choice.message, "refusal", None):
-        return _CANT
+        return Answer(_CANT)
     text = (choice.message.content or "").strip()
-    return text or _ERROR
+    return Answer(text or _ERROR)

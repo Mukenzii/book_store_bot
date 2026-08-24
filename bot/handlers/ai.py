@@ -77,7 +77,17 @@ async def ask_ai(message: Message, state: FSMContext) -> None:
     # past ai_max_books, switch this to semantic retrieval.)
     books = await repo.sample_books(settings.ai_max_books)
 
-    reply = await ai.answer_question(question, books)
+    res = await ai.answer_question(question, books)
+
+    # The model called our store-finder ("where can I buy?"): leave AI mode and
+    # show the main menu so the "📍 Joylashuvni yuborish" button (existing
+    # nearest-store flow) is available.
+    if res.find_store:
+        await state.clear()
+        await message.answer(res.text, reply_markup=request_location_kb())
+        return
+
+    reply = res.text
     body = _fmt(reply)
 
     # Collect the info images for the catalogue books the assistant actually named.
