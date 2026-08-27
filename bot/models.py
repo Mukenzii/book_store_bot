@@ -69,6 +69,9 @@ class Book(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(300))
     author: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Imprint / publisher (Falaq Nashr distributes several: Nun nashr, Falaq
+    # nashr, Eng sharafli ummat, Holis nashr, G'yosiddin Habibulloh, ...).
+    publisher: Mapped[str | None] = mapped_column(String(120), nullable=True)
     genre: Mapped[str | None] = mapped_column(String(120), nullable=True)
     # The blurb / summary — the richest signal the assistant uses to recommend.
     annotation: Mapped[str | None] = mapped_column(Text, nullable=True)

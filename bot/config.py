@@ -36,8 +36,9 @@ class Settings(BaseSettings):
     openai_base_url: str = ""
     # Model the assistant uses. Override with a stronger/cheaper GPT model.
     ai_model: str = "gpt-4o-mini"
-    # Max books passed to the model as context per question (keeps prompts small).
-    ai_max_books: int = 40
+    # Max books passed to the model as context per question. With the full
+    # catalogue handed over each time, keep this >= the number of books.
+    ai_max_books: int = 80
     # Cap on the model's answer length (tokens).
     ai_max_tokens: int = 1024
 
