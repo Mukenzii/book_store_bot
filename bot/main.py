@@ -6,7 +6,9 @@ from pathlib import Path
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import ErrorEvent
 
 from bot import admins
 from bot.config import settings
@@ -21,6 +23,32 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+async def _on_error(event: ErrorEvent) -> bool:
+    """Catch-all handler so a single failing update never bubbles up as a
+    traceback that spams the log or interrupts the dispatcher.
+
+    On this VPS the outbound link to Telegram is flaky, which produces two
+    harmless-but-noisy failures we swallow quietly:
+      * "query is too old / query ID is invalid" — a callback.answer() that
+        arrived after the ~15s Telegram window because the network stalled; the
+        user's tap is stale, nothing to do.
+      * TelegramNetworkError — a transient timeout; aiogram already retries.
+    Anything else is logged with a traceback so real bugs still surface.
+    Returning True marks the error handled.
+    """
+    exc = event.exception
+    msg = str(exc)
+    if isinstance(exc, TelegramBadRequest) and (
+        "query is too old" in msg or "query ID is invalid" in msg
+    ):
+        return True
+    if isinstance(exc, TelegramNetworkError):
+        logger.warning("Transient Telegram network error: %s", exc)
+        return True
+    logger.exception("Unhandled error while processing an update: %s", exc)
+    return True
 
 
 def _require_token() -> None:
@@ -102,6 +130,7 @@ async def main() -> None:
     )
     dp = Dispatcher(storage=MemoryStorage())
     dp.update.outer_middleware(RegisterUserMiddleware())
+    dp.errors.register(_on_error)
     dp.include_router(get_root_router())
 
     await init_db()
