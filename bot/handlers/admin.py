@@ -172,7 +172,7 @@ async def on_menu(callback: CallbackQuery, callback_data: AdminMenu, state: FSMC
         await callback.message.answer(
             "📢 <b>Hammaga xabar</b>\n\n"
             "Yubormoqchi bo‘lgan xabaringizni shu yerga yuboring "
-            "(matn, rasm, rasm + izoh — istalgan ko‘rinishda).\n\n"
+            f"({_POST_KINDS_HINT}).\n\n"
             "Bekor qilish uchun /cancel.",
             reply_markup=ReplyKeyboardRemove(),
         )
@@ -350,6 +350,39 @@ async def add_hours(message: Message, state: FSMContext) -> None:
 
 # --- broadcast to all users --------------------------------------------------
 
+# What an admin may send as a broadcast / scheduled post. copy_message forwards
+# ANY of these unchanged, so the list is just for the user's information.
+_POST_KINDS_HINT = "matn, rasm, video, hujjat yoki izohli media — istalgan ko‘rinishda"
+
+# Emoji label per content type — used for the post preview when there's no text.
+# Ordered so the most specific attribute wins (a GIF sets .animation *and*
+# .document; a round video sets .video_note, not .video).
+_CONTENT_LABELS = (
+    ("photo", "🖼 Rasm"),
+    ("video_note", "🎥 Video xabar"),
+    ("video", "🎥 Video"),
+    ("animation", "🎞 GIF"),
+    ("audio", "🎵 Audio"),
+    ("voice", "🎤 Ovozli xabar"),
+    ("document", "📎 Fayl"),
+    ("sticker", "🩷 Stiker"),
+)
+
+
+def _content_preview(message: Message) -> str:
+    """Short label describing a broadcast/scheduled message of any content type."""
+    if message.text:
+        return message.text.strip().replace("\n", " ")[:120]
+    label = "post"
+    for attr, name in _CONTENT_LABELS:
+        if getattr(message, attr, None):
+            label = name
+            break
+    if message.caption:
+        label = f"{label}: {message.caption.strip().replace(chr(10), ' ')}"
+    return label[:120]
+
+
 @router.message(Broadcast.message)
 async def broadcast_preview(message: Message, state: FSMContext) -> None:
     # Remember which message to copy, then show a preview + confirm button.
@@ -424,7 +457,7 @@ def _post_text(post) -> str:
         f"📅 <b>Rejalashtirilgan post #{post.id}</b>\n"
         f"🗓 Kun: <b>{WEEKDAY_NAMES[post.weekday]}</b>\n"
         f"🕒 Vaqt: <b>{post.send_time}</b>\n"
-        f"📝 Matn: {post.preview or '—'}\n"
+        f"📝 Post: {post.preview or '—'}\n"
         f"📤 Oxirgi yuborilgan: {last}"
     )
 
@@ -503,14 +536,14 @@ async def on_sched_time(message: Message, state: FSMContext) -> None:
     await state.set_state(AddPost.content)
     await message.answer(
         "Endi yubormoqchi bo‘lgan <b>postni</b> yuboring "
-        "(matn, rasm, rasm + izoh — istalgan ko‘rinishda)."
+        f"({_POST_KINDS_HINT})."
     )
 
 
 @router.message(AddPost.content)
 async def on_sched_content(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
-    preview = ((message.text or message.caption or "post").strip().replace("\n", " "))[:120]
+    preview = _content_preview(message)
     post = await repo.create_scheduled_post(
         weekday=data["weekday"],
         send_time=data["send_time"],
