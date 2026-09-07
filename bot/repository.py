@@ -202,6 +202,40 @@ async def get_user(user_id: int) -> User | None:
         return await session.get(User, user_id)
 
 
+async def get_user_by_username(username: str) -> User | None:
+    """Find a user by @username (case-insensitive). Only users who have started
+    the bot are in this table, so this can't resolve strangers."""
+    from sqlalchemy import func, select
+
+    uname = (username or "").lstrip("@").strip()
+    if not uname:
+        return None
+    async with session_factory() as session:
+        return await session.scalar(
+            select(User).where(func.lower(User.username) == uname.lower()).limit(1)
+        )
+
+
+async def get_user_by_phone(phone: str) -> User | None:
+    """Find a user by phone, matching on the last 9 digits so +998, 998 and
+    local forms all hit. Only users who shared their phone are stored."""
+    from sqlalchemy import func, select
+
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    if len(digits) < 7:
+        return None
+    suffix = digits[-9:]
+    async with session_factory() as session:
+        return await session.scalar(
+            select(User)
+            .where(
+                User.phone.isnot(None),
+                func.right(func.regexp_replace(User.phone, r"\D", "", "g"), 9) == suffix,
+            )
+            .limit(1)
+        )
+
+
 async def set_user_phone(user_id: int, phone: str) -> None:
     async with session_factory() as session:
         user = await session.get(User, user_id)

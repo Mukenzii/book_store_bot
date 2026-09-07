@@ -155,7 +155,16 @@ def stores_list_kb(stores: list[StoreWithDistance]) -> InlineKeyboardMarkup:
 
 # --- admin keyboards ---------------------------------------------------------
 
-def admin_menu_kb() -> InlineKeyboardMarkup:
+def admin_menu_kb(is_super: bool = True) -> InlineKeyboardMarkup:
+    """Admin panel menu. Regular (coworker) admins may only add stores, so they
+    see a trimmed menu; super admins see everything."""
+    if not is_super:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="➕ Do‘kon qo‘shish", callback_data=AdminMenu(action="add").pack())],
+                [InlineKeyboardButton(text="✖️ Yopish", callback_data=AdminMenu(action="close").pack())],
+            ]
+        )
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="➕ Do‘kon qo‘shish", callback_data=AdminMenu(action="add").pack())],

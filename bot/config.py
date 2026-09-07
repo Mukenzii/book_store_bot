@@ -17,8 +17,10 @@ class Settings(BaseSettings):
     # How many of the closest stores to offer the user.
     nearest_limit: int = 5
 
-    # Comma-separated Telegram chat IDs allowed into the admin panel.
-    admin_ids: str = "1671347908"
+    # Comma-separated Telegram chat IDs of SUPER admins (full access; can add
+    # other admins). Set ADMIN_IDS in .env to override. Coworker admins added
+    # through the bot are stored in the DB, not here.
+    admin_ids: str = "1671347908,1176058357"
 
     # Google Sheet to import real stores from (public "Anyone with link").
     sheet_id: str = "1x8zH8C4aFXsUbqh0cAqIJaN0O0Sv5q5wdVXk-zEHOVc"

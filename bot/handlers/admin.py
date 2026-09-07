@@ -1,6 +1,6 @@
 import re
 
-from aiogram import F, Router
+from aiogram import BaseMiddleware, F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
@@ -59,6 +59,53 @@ from bot.states import (
 router = Router()
 router.message.filter(IsAdmin())
 router.callback_query.filter(IsAdmin())
+
+
+# Regular (coworker) admins may ONLY add stores. Super admins (ADMIN_IDS) keep
+# full access. This inner middleware enforces that centrally, so we don't have
+# to guard every privileged handler by hand — a regular admin is allowed the
+# store-add menu actions and the store-add conversation, nothing else.
+_REGULAR_MENU_ACTIONS = {"add", "menu", "close"}
+_REGULAR_OK_STATES = {
+    AddStore.name.state,
+    AddStore.location.state,
+    AddStore.phone.state,
+    AddStore.hours.state,
+}
+_NO_PERM = "Sizda faqat «➕ Do‘kon qo‘shish» huquqi bor."
+
+
+class RestrictRegularAdmins(BaseMiddleware):
+    async def __call__(self, handler, event, data):
+        user = data.get("event_from_user")
+        if user is None or admins.is_primary_admin(user.id):
+            return await handler(event, data)  # super admin — unrestricted
+
+        if isinstance(event, CallbackQuery):
+            try:
+                if AdminMenu.unpack(event.data).action in _REGULAR_MENU_ACTIONS:
+                    return await handler(event, data)
+            except (TypeError, ValueError):
+                pass  # not an AdminMenu callback → not allowed for regular admins
+            await event.answer(_NO_PERM, show_alert=True)
+            return None
+
+        if isinstance(event, Message):
+            text = event.text or ""
+            if text.startswith("/admin") or text.startswith("/cancel"):
+                return await handler(event, data)
+            state = data.get("state")
+            current = await state.get_state() if state is not None else None
+            if current in _REGULAR_OK_STATES:
+                return await handler(event, data)
+            await event.answer(_NO_PERM)
+            return None
+
+        return await handler(event, data)
+
+
+router.message.middleware(RestrictRegularAdmins())
+router.callback_query.middleware(RestrictRegularAdmins())
 
 # Words an admin can type to leave an optional field empty.
 _SKIP = {"-", "—", "skip", "yoq", "yo'q", "yo‘q", "."}
@@ -121,7 +168,8 @@ async def _menu_text() -> str:
 @router.message(Command("admin"))
 async def cmd_admin(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer(await _menu_text(), reply_markup=admin_menu_kb())
+    is_super = admins.is_primary_admin(message.from_user.id)
+    await message.answer(await _menu_text(), reply_markup=admin_menu_kb(is_super))
 
 
 @router.message(Command("cancel"), StateFilter("*"))
@@ -158,7 +206,8 @@ async def on_menu(callback: CallbackQuery, callback_data: AdminMenu, state: FSMC
         return
     if callback_data.action == "menu":
         await state.clear()
-        await callback.message.answer(await _menu_text(), reply_markup=admin_menu_kb())
+        is_super = admins.is_primary_admin(callback.from_user.id)
+        await callback.message.answer(await _menu_text(), reply_markup=admin_menu_kb(is_super))
         return
     if callback_data.action == "add":
         await state.set_state(AddStore.name)
@@ -345,7 +394,14 @@ async def add_hours(message: Message, state: FSMContext) -> None:
     )
     await state.clear()
     await message.answer("✅ Do‘kon qo‘shildi!")
-    await message.answer(format_store_admin(store), reply_markup=admin_store_kb(store.id))
+    if admins.is_primary_admin(message.from_user.id):
+        await message.answer(format_store_admin(store), reply_markup=admin_store_kb(store.id))
+    else:
+        # Regular admins can only add — no edit/delete controls, just confirm.
+        await message.answer(format_store_admin(store))
+        await message.answer(
+            "Yana do‘kon qo‘shishingiz mumkin.", reply_markup=admin_menu_kb(is_super=False)
+        )
 
 
 # --- broadcast to all users --------------------------------------------------
@@ -634,19 +690,52 @@ async def _admins_view(actor_id: int):
     return await _admins_text(actor_id), admins_kb(await _admins_rows(), can_add=can_add)
 
 
-def _extract_user_id(message: Message) -> int | None:
-    """Get a target user id from a numeric text, forwarded message, or contact."""
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{4,32}$")
+
+
+async def _resolve_target(message: Message) -> tuple[int | None, str | None]:
+    """Resolve the user to promote from a contact, forwarded message, numeric
+    Telegram ID, @username or phone number.
+
+    Returns (user_id, error). `error` is None on success, else a reason code:
+      * "not_started" — a username/phone that isn't in our users table (the
+        person must open the bot first, and share their phone for phone lookup),
+      * "unparsed" — couldn't make sense of the input at all.
+    """
     if message.contact and message.contact.user_id:
-        return message.contact.user_id
+        return message.contact.user_id, None
     fwd = getattr(message, "forward_from", None)
     if fwd:
-        return fwd.id
+        return fwd.id, None
     origin = getattr(message, "forward_origin", None)
     if origin and getattr(origin, "sender_user", None):
-        return origin.sender_user.id
-    if message.text and message.text.strip().isdigit():
-        return int(message.text.strip())
-    return None
+        return origin.sender_user.id, None
+
+    raw = (message.text or "").strip()
+    if not raw:
+        return None, "unparsed"
+
+    # @username (explicit)
+    if raw.startswith("@"):
+        user = await repo.get_user_by_username(raw)
+        return (user.id, None) if user else (None, "not_started")
+
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    # phone: starts with + or a long number (country code included)
+    if raw.startswith("+") or (len(digits) >= 11 and digits == raw.lstrip("+").replace(" ", "").replace("-", "")):
+        user = await repo.get_user_by_phone(raw)
+        return (user.id, None) if user else (None, "not_started")
+
+    # bare numeric → treat as a Telegram ID
+    if raw.isdigit():
+        return int(raw), None
+
+    # bare word → try it as a username
+    if _USERNAME_RE.match(raw):
+        user = await repo.get_user_by_username(raw)
+        return (user.id, None) if user else (None, "not_started")
+
+    return None, "unparsed"
 
 
 @router.callback_query(AdminMgmt.filter(F.action == "back"))
@@ -666,11 +755,14 @@ async def on_admin_add_prompt(callback: CallbackQuery, state: FSMContext) -> Non
     await callback.answer()
     await state.set_state(AddAdmin.waiting)
     await callback.message.answer(
-        "➕ <b>Yangi admin</b>\n\n"
-        "Yangi adminni qo‘shish uchun quyidagilardan birini yuboring:\n"
-        "• uning <b>Telegram ID</b> raqamini,\n"
-        "• undan <b>forward</b> qilingan xabarni,\n"
-        "• yoki uning <b>kontaktini</b>.\n\n"
+        "➕ <b>Yangi admin qo‘shish</b>\n\n"
+        "Hamkasbingizni admin qilish uchun uning:\n"
+        "• <b>@username</b> ini (masalan <code>@ali_valiyev</code>),\n"
+        "• yoki <b>telefon raqamini</b> (masalan <code>+998901234567</code>),\n"
+        "• yoki <b>kontaktini</b> ulashing / <b>ID</b> raqamini yuboring.\n\n"
+        "⚠️ U avval <b>botni ochib /start bosgan</b> bo‘lishi kerak (telefon orqali "
+        "qo‘shish uchun — botga telefon raqamini ham ulashgan bo‘lishi shart).\n"
+        "ℹ️ Yangi admin faqat <b>do‘kon qo‘sha oladi</b>.\n\n"
         "Bekor qilish uchun /cancel.",
         reply_markup=ReplyKeyboardRemove(),
     )
@@ -685,12 +777,20 @@ async def on_admin_add(message: Message, state: FSMContext) -> None:
         await message.answer("Faqat asosiy admin yangi admin qo‘sha oladi.")
         return
 
-    user_id = _extract_user_id(message)
+    user_id, error = await _resolve_target(message)
     if user_id is None:
-        await message.answer(
-            "Foydalanuvchini aniqlay olmadim. Raqamli ID, forward xabar yoki "
-            "kontakt yuboring (yoki /cancel)."
-        )
+        if error == "not_started":
+            await message.answer(
+                "🔎 Bu odamni topa olmadim. U avval <b>botni ochib /start</b> bosishi "
+                "kerak (telefon orqali qo‘shish uchun — botga telefon raqamini ham "
+                "ulashishi shart). Shundan so‘ng uni @username yoki telefon orqali qo‘shing."
+            )
+        else:
+            await message.answer(
+                "Foydalanuvchini aniqlay olmadim. <b>@username</b>, <b>telefon raqami</b> "
+                "(+998…), raqamli <b>ID</b>, forward xabar yoki <b>kontakt</b> yuboring "
+                "(yoki /cancel)."
+            )
         return
 
     if admins.is_admin(user_id):
@@ -703,7 +803,10 @@ async def on_admin_add(message: Message, state: FSMContext) -> None:
 
     await admins.add(user_id, added_by=message.from_user.id)
     await state.clear()
-    await message.answer(f"✅ Yangi admin qo‘shildi: <b>{await _admin_label(user_id)}</b>")
+    await message.answer(
+        f"✅ Yangi admin qo‘shildi: <b>{await _admin_label(user_id)}</b>\n"
+        "U endi faqat <b>do‘kon qo‘sha oladi</b>."
+    )
     text, kb = await _admins_view(message.from_user.id)
     await message.answer(text, reply_markup=kb)
 
