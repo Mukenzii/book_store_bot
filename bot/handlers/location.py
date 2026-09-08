@@ -41,15 +41,13 @@ async def handle_location(message: Message, state: FSMContext) -> None:
     await state.set_state(StoreSearch.choosing_store)
     await state.update_data(lat=lat, lon=lon)
 
-    # Keep the location button visible (don't remove the reply keyboard) so the
-    # user can search again anytime.
+    # One message (not two): the store list rides on an inline keyboard, and the
+    # 📍 location button is already persistent (is_persistent=True), so it stays
+    # visible on its own. Fewer Telegram round-trips = a snappier reply on a slow
+    # link.
     await message.answer(
         f"Sizga eng yaqin {len(stores)} ta do‘kon. "
         "Tafsilotlarini ko‘rish uchun birini tanlang 👇",
-        reply_markup=request_location_kb(),
-    )
-    await message.answer(
-        "Eng yaqin kitob do‘konlari:",
         reply_markup=stores_list_kb(stores),
     )
 

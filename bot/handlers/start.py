@@ -39,11 +39,13 @@ async def _has_phone(user_id: int) -> bool:
 async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()
     # First visit (no phone on file) → ask for it. Returning user → recognised.
+    # One send per branch (not two) — on a slow link each Telegram round-trip
+    # adds latency, so we greet + guide in a single message.
     if await _has_phone(message.from_user.id):
         await message.answer(
-            f"Xush kelibsiz, {message.from_user.first_name}! 👋",
+            f"Xush kelibsiz, {message.from_user.first_name}!\n\n{WELCOME}",
+            reply_markup=request_location_kb(),
         )
-        await message.answer(WELCOME, reply_markup=request_location_kb())
     else:
         await message.answer(ASK_PHONE, reply_markup=request_phone_kb())
 
@@ -61,8 +63,10 @@ async def on_contact(message: Message, state: FSMContext) -> None:
 
     await repo.set_user_phone(message.from_user.id, contact.phone_number)
     await state.clear()
-    await message.answer("✅ Rahmat! Ro‘yxatdan o‘tdingiz.")
-    await message.answer(WELCOME, reply_markup=request_location_kb())
+    await message.answer(
+        f"✅ Rahmat! Ro‘yxatdan o‘tdingiz.\n\n{WELCOME}",
+        reply_markup=request_location_kb(),
+    )
 
 
 @router.message(Command("help"))
