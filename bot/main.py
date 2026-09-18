@@ -124,13 +124,16 @@ async def _start_webhook(bot: Bot, dp: Dispatcher):
 async def main() -> None:
     _require_token()
 
-    # Route Telegram traffic through a proxy when configured — the real fix for
-    # a server whose direct link to api.telegram.org is unreliable.
-    session = None
-    if settings.telegram_proxy.strip():
-        from aiogram.client.session.aiohttp import AiohttpSession
+    from aiogram.client.session.aiohttp import AiohttpSession
 
-        session = AiohttpSession(proxy=settings.telegram_proxy.strip())
+    # Cap the client timeout at 20s. When the link to Telegram STALLS mid-request
+    # (packet loss), the default 60s timeout is what made getUpdates hang ~70s
+    # before reconnecting — the ~1-minute lag. A normal long-poll returns in
+    # <=10s (polling_timeout), well under this. Proxy is set when configured —
+    # the real cure for the unreliable route.
+    proxy = settings.telegram_proxy.strip() or None
+    session = AiohttpSession(proxy=proxy, timeout=20)
+    if proxy:
         logger.info("Telegram API traffic is routed through a proxy.")
 
     bot = Bot(
