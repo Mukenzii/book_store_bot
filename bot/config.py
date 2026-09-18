@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     # Optional custom base URL (e.g. Azure OpenAI or an OpenAI-compatible proxy).
     openai_base_url: str = ""
+
+    # Optional proxy for ALL Telegram API traffic (getUpdates + sendMessage).
+    # Set TELEGRAM_PROXY to an http(s) proxy URL (e.g. http://user:pass@host:port)
+    # when this server's direct link to api.telegram.org is unreliable — every
+    # call then goes over the proxy's clean route. Empty = direct connection.
+    telegram_proxy: str = ""
     # Model the assistant uses. Override with a stronger/cheaper GPT model.
     ai_model: str = "gpt-4o-mini"
     # Max books passed to the model as context per question. With the full

@@ -15,7 +15,7 @@ from bot.config import settings
 from bot.database import engine, init_db
 from bot.handlers import get_root_router
 from bot.healthcheck import HEARTBEAT_FILE
-from bot.middlewares import RegisterUserMiddleware
+from bot.middlewares import RegisterUserMiddleware, ThrottleMiddleware
 from bot.scheduler import scheduler_loop
 
 logging.basicConfig(
@@ -124,11 +124,22 @@ async def _start_webhook(bot: Bot, dp: Dispatcher):
 async def main() -> None:
     _require_token()
 
+    # Route Telegram traffic through a proxy when configured — the real fix for
+    # a server whose direct link to api.telegram.org is unreliable.
+    session = None
+    if settings.telegram_proxy.strip():
+        from aiogram.client.session.aiohttp import AiohttpSession
+
+        session = AiohttpSession(proxy=settings.telegram_proxy.strip())
+        logger.info("Telegram API traffic is routed through a proxy.")
+
     bot = Bot(
         token=settings.bot_token,
+        session=session,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = Dispatcher(storage=MemoryStorage())
+    dp.update.outer_middleware(ThrottleMiddleware())      # drop duplicate bursts first
     dp.update.outer_middleware(RegisterUserMiddleware())
     dp.errors.register(_on_error)
     dp.include_router(get_root_router())
@@ -155,10 +166,14 @@ async def main() -> None:
             await asyncio.Event().wait()  # serve until the process is stopped
         else:
             await bot.delete_webhook(drop_pending_updates=True)
-            # polling_timeout=25 keeps the long-poll connection cycling every
-            # ~25s so a firewall/NAT can't drop it as "idle". aiogram already
-            # auto-reconnects on any transient network error.
-            await dp.start_polling(bot, polling_timeout=25)
+            # This VPS's link to Telegram intermittently stalls. A shorter
+            # long-poll window means a dead connection is detected and retried
+            # in ~10s instead of ~25s, so the "no replies then a burst" dead
+            # windows shrink. Real cure is a proxy with a clean route to
+            # Telegram (settings.telegram_proxy); this only limits the damage.
+            # An update that actually exists still returns immediately — the
+            # timeout only bounds *empty* polls and failure detection.
+            await dp.start_polling(bot, polling_timeout=10)
     finally:
         # Graceful shutdown: stop background tasks, tear down the web server,
         # close the bot session and the DB connection pool.
