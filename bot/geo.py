@@ -53,7 +53,9 @@ def resolve(url: str) -> str:
     """Follow redirects so a short link becomes its full coordinate-bearing URL."""
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=12) as resp:
+        # 6s, not 12: on a slow outbound link a long timeout makes the admin
+        # wait ages before we fall back / report failure. Better to fail fast.
+        with urllib.request.urlopen(req, timeout=6) as resp:
             return resp.geturl()
     except Exception:  # noqa: BLE001 — any network error just means "can't resolve"
         return url

@@ -124,10 +124,11 @@ FIELD_COLUMN = {"hours": "working_hours"}
 # share their *own* location, and copy-pasting a Google Maps link is what the
 # store owners actually send.
 _LOCATION_PROMPT = (
-    "📍 Do‘kon joylashuvining <b>havolasini</b> yuboring.\n\n"
-    "Google Maps’da nuqtani belgilab, «Ulashish → Havolani nusxalash» qiling "
-    "va shu yerga tashlang. <code>41.311081, 69.240562</code> ko‘rinishidagi "
-    "koordinatani ham qabul qilamiz."
+    "📍 Do‘kon joylashuvini yuboring.\n\n"
+    "⚡️ <b>Eng tez usul</b> — koordinatani yuboring: <code>41.311081, 69.240562</code> "
+    "(darhol ishlaydi, tarmoqqa chiqmaydi).\n\n"
+    "Yoki Google Maps <b>havolasini</b> tashlang (biroz sekinroq — havolani ochib "
+    "koordinatani aniqlaymiz)."
 )
 _LOCATION_INVALID = (
     "❌ Havoladan koordinata topilmadi. To‘liq Google Maps havolasini "
@@ -297,6 +298,7 @@ async def on_edit_value(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     field = data["field"]
     if field == "location":
+        await message.bot.send_chat_action(message.chat.id, "typing")
         coords = await geo.coords_from_link(message.text)
         if coords is None:
             await message.answer(_LOCATION_INVALID)
@@ -345,6 +347,10 @@ async def add_name(message: Message, state: FSMContext) -> None:
 
 @router.message(AddStore.location, F.text)
 async def add_location(message: Message, state: FSMContext) -> None:
+    # Following a maps.app.goo.gl short link is a network hop; show activity so
+    # the admin sees the bot is working, not frozen. A raw "lat, lon" paste
+    # skips the network entirely and returns instantly.
+    await message.bot.send_chat_action(message.chat.id, "typing")
     coords = await geo.coords_from_link(message.text)
     if coords is None:
         await message.answer(_LOCATION_INVALID)
