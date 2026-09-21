@@ -1,3 +1,5 @@
+import re
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +25,9 @@ class Settings(BaseSettings):
     admin_ids: str = "1671347908,1176058357"
 
     # Google Sheet to import real stores from (public "Anyone with link").
+    # Easiest: paste the full sheet URL into SHEET_URL — the sheet id and gid are
+    # taken from it. SHEET_ID/SHEET_GID are the fallback when SHEET_URL is empty.
+    sheet_url: str = ""
     sheet_id: str = "1x8zH8C4aFXsUbqh0cAqIJaN0O0Sv5q5wdVXk-zEHOVc"
     sheet_gid: str = "0"
 
@@ -90,9 +95,19 @@ class Settings(BaseSettings):
 
     @property
     def sheet_csv_url(self) -> str:
+        """CSV export URL. Prefers SHEET_URL (any Google Sheets link) — the id
+        and gid are pulled from it; otherwise falls back to SHEET_ID/SHEET_GID."""
+        url = self.sheet_url.strip()
+        if url:
+            m = re.search(r"/spreadsheets/d/([A-Za-z0-9_-]+)", url)
+            sheet_id = m.group(1) if m else self.sheet_id
+            g = re.search(r"[#?&]gid=(\d+)", url)
+            gid = g.group(1) if g else self.sheet_gid
+        else:
+            sheet_id, gid = self.sheet_id, self.sheet_gid
         return (
-            f"https://docs.google.com/spreadsheets/d/{self.sheet_id}"
-            f"/export?format=csv&gid={self.sheet_gid}"
+            f"https://docs.google.com/spreadsheets/d/{sheet_id}"
+            f"/export?format=csv&gid={gid}"
         )
 
     @property
