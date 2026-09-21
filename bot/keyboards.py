@@ -169,6 +169,7 @@ def admin_menu_kb(is_super: bool = True) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="➕ Do‘kon qo‘shish", callback_data=AdminMenu(action="add").pack())],
             [InlineKeyboardButton(text="📋 Do‘konlar ro‘yxati", callback_data=AdminMenu(action="list").pack())],
+            [InlineKeyboardButton(text="📥 Google Sheets’dan import", callback_data=AdminMenu(action="sheetimport").pack())],
             [InlineKeyboardButton(text="📢 Hammaga xabar yuborish", callback_data=AdminMenu(action="broadcast").pack())],
             [InlineKeyboardButton(text="📖 Kitoblar (AI)", callback_data=AdminMenu(action="books").pack())],
             [InlineKeyboardButton(text="📅 Rejalashtirilgan postlar", callback_data=AdminMenu(action="schedule").pack())],

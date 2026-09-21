@@ -1,3 +1,4 @@
+import logging
 import re
 
 from aiogram import BaseMiddleware, F, Router
@@ -45,6 +46,9 @@ from bot.keyboards import (
 )
 from bot import geo
 from bot import repository as repo
+from bot import sheet_import
+
+logger = logging.getLogger(__name__)
 from bot.states import (
     AddAdmin,
     AddBook,
@@ -204,6 +208,28 @@ async def on_menu(callback: CallbackQuery, callback_data: AdminMenu, state: FSMC
         return
     if callback_data.action == "list":
         await _show_list(callback.message, 0)
+        return
+    if callback_data.action == "sheetimport":
+        await callback.message.answer(
+            "⏳ Google Sheets tekshirilmoqda… (bir daqiqacha kutishingiz mumkin)"
+        )
+        try:
+            summary = await sheet_import.run_import()
+        except Exception as exc:  # noqa: BLE001 — report failure, keep the bot alive
+            logger.warning("Sheet import failed: %s", exc)
+            await callback.message.answer(
+                "❌ Import xatolik bilan yakunlandi. Keyinroq qayta urinib ko‘ring.",
+                reply_markup=admin_menu_kb(is_super=True),
+            )
+            return
+        await callback.message.answer(
+            "✅ <b>Import yakunlandi</b>\n"
+            f"📋 Jadvaldagi qatorlar: {summary.total_rows}\n"
+            f"➕ Yangi qo‘shildi: <b>{summary.added}</b> ta do‘kon\n"
+            f"♻️ Dublikat (o‘tkazib yuborildi): {summary.duplicates}\n"
+            f"📍 Joylashuvsiz (o‘tkazib yuborildi): {summary.no_location}",
+            reply_markup=admin_menu_kb(is_super=True),
+        )
         return
     if callback_data.action == "menu":
         await state.clear()
