@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     # call then goes over the proxy's clean route. Empty = direct connection.
     telegram_proxy: str = ""
     # Model the assistant uses. Override with a stronger/cheaper GPT model.
-    ai_model: str = "gpt-4o-mini"
+    ai_model: str = "gpt-4.1"
     # Max books passed to the model as context per question. With the full
     # catalogue handed over each time, keep this >= the number of books.
     ai_max_books: int = 80
