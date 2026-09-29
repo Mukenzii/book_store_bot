@@ -5,7 +5,11 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import text
 
 from bot.database import session_factory
-from bot.models import Admin, Book, ScheduledPost, Setting, Store, User
+from bot.models import Admin, Book, ScheduledPost, Setting, Store, StoreBook, User
+
+
+def _digits(raw: str | None) -> str:
+    return "".join(c for c in (raw or "") if c.isdigit())
 
 
 @dataclass(slots=True)
@@ -518,5 +522,135 @@ async def remove_admin(user_id: int) -> bool:
         if admin is None:
             return False
         await session.delete(admin)
+        await session.commit()
+        return True
+
+
+# --- store owners & their available books -----------------------------------
+
+async def stores_owned_by_phone(phone: str) -> list[Store]:
+    """Stores whose admin-entered phone matches this phone (last 9 digits).
+
+    A store's `phone` may hold several comma-separated numbers, so we test
+    whether the 9-digit suffix appears in the store's concatenated digits.
+    """
+    from sqlalchemy import select
+
+    suffix = _digits(phone)[-9:]
+    if len(suffix) < 9:
+        return []
+    async with session_factory() as session:
+        rows = (await session.scalars(select(Store).where(Store.phone.isnot(None)))).all()
+    return [s for s in rows if suffix in _digits(s.phone)]
+
+
+async def add_store_book(
+    store_id: int,
+    *,
+    book_id: int | None,
+    title: str,
+    author: str | None,
+    added_by: int | None,
+) -> StoreBook | None:
+    """Add a book to a store's availability list (pending approval).
+
+    Returns None if the same book (by catalogue id, or by normalised title) is
+    already listed for that store — no duplicates.
+    """
+    from sqlalchemy import select
+
+    title = (title or "").strip()
+    if not title:
+        return None
+    tkey = re.sub(r"[^a-z0-9а-я]", "", title.lower())
+    async with session_factory() as session:
+        existing = (
+            await session.scalars(select(StoreBook).where(StoreBook.store_id == store_id))
+        ).all()
+        for e in existing:
+            if book_id is not None and e.book_id == book_id:
+                return None
+            if re.sub(r"[^a-z0-9а-я]", "", (e.title or "").lower()) == tkey:
+                return None
+        sb = StoreBook(
+            store_id=store_id,
+            book_id=book_id,
+            title=title[:300],
+            author=(author or None),
+            added_by=added_by,
+        )
+        session.add(sb)
+        await session.commit()
+        await session.refresh(sb)
+        return sb
+
+
+async def list_store_books(store_id: int, *, approved_only: bool = False) -> list[StoreBook]:
+    from sqlalchemy import select
+
+    stmt = select(StoreBook).where(StoreBook.store_id == store_id)
+    if approved_only:
+        stmt = stmt.where(StoreBook.approved.is_(True))
+    stmt = stmt.order_by(StoreBook.title)
+    async with session_factory() as session:
+        return list(await session.scalars(stmt))
+
+
+async def delete_store_book(sb_id: int, store_id: int) -> bool:
+    """Delete a store-book, but only if it belongs to that store (owner scope)."""
+    async with session_factory() as session:
+        sb = await session.get(StoreBook, sb_id)
+        if sb is None or sb.store_id != store_id:
+            return False
+        await session.delete(sb)
+        await session.commit()
+        return True
+
+
+async def pending_store_books(limit: int = 20) -> list[tuple[StoreBook, Store]]:
+    """Un-approved store-books with their store, for the admin approval queue."""
+    from sqlalchemy import select
+
+    async with session_factory() as session:
+        rows = (
+            await session.execute(
+                select(StoreBook, Store)
+                .join(Store, Store.id == StoreBook.store_id)
+                .where(StoreBook.approved.is_(False))
+                .order_by(StoreBook.created_at)
+                .limit(limit)
+            )
+        ).all()
+    return [(sb, st) for sb, st in rows]
+
+
+async def count_pending_store_books() -> int:
+    from sqlalchemy import func, select
+
+    async with session_factory() as session:
+        return int(
+            await session.scalar(
+                select(func.count()).select_from(StoreBook).where(StoreBook.approved.is_(False))
+            )
+            or 0
+        )
+
+
+async def approve_store_book(sb_id: int) -> bool:
+    async with session_factory() as session:
+        sb = await session.get(StoreBook, sb_id)
+        if sb is None:
+            return False
+        sb.approved = True
+        await session.commit()
+        return True
+
+
+async def reject_store_book(sb_id: int) -> bool:
+    async with session_factory() as session:
+        sb = await session.get(StoreBook, sb_id)
+        if sb is None:
+            return False
+        await session.delete(sb)
         await session.commit()
         return True

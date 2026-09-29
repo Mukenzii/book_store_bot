@@ -136,3 +136,29 @@ class Admin(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class StoreBook(Base):
+    """A book a store owner says is available at their store.
+
+    Ownership is by phone: the store's `phone` (entered by an admin) is the
+    owner's key — a Telegram user whose shared phone matches it manages that
+    store's books here. Each row either references a catalogue Book (`book_id`)
+    or is a free-text entry; `title`/`author` are denormalised for display.
+    A row is hidden from customers until a super-admin sets `approved`.
+    """
+
+    __tablename__ = "store_books"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    store_id: Mapped[int] = mapped_column(Integer, index=True)
+    # Set when the owner picked a catalogue book; NULL for a free-text entry.
+    book_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    title: Mapped[str] = mapped_column(String(300))
+    author: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Hidden from customers until a super-admin approves it.
+    approved: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    added_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

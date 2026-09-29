@@ -1,10 +1,15 @@
+from html import escape
+
 from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from bot.formatting import format_store_details
 from bot.keyboards import StoreCallback
-from bot.repository import get_store
+from bot.repository import get_store, list_store_books
+
+# Cap the number of books listed on a store card so the message stays readable.
+_MAX_CARD_BOOKS = 30
 
 router = Router()
 
@@ -33,7 +38,21 @@ async def show_store(
         return
 
     await callback.answer()
-    await callback.message.answer(format_store_details(store))
+
+    details = format_store_details(store)
+    # Append the store's approved available books, if any.
+    books = await list_store_books(store.id, approved_only=True)
+    if books:
+        lines = ["", "📚 <b>Mavjud kitoblar:</b>"]
+        for b in books[:_MAX_CARD_BOOKS]:
+            line = f"• {escape(b.title)}"
+            if b.author:
+                line += f" — {escape(b.author)}"
+            lines.append(line)
+        if len(books) > _MAX_CARD_BOOKS:
+            lines.append(f"… va yana {len(books) - _MAX_CARD_BOOKS} ta")
+        details += "\n" + "\n".join(lines)
+    await callback.message.answer(details)
     # A venue gives the user a tappable map pin they can open / route to.
     await callback.message.answer_venue(
         latitude=store.latitude,

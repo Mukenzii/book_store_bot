@@ -65,3 +65,14 @@ class EditHouseInfo(StatesGroup):
     """Admin flow for editing the publishing-house context the AI is given."""
 
     value = State()
+
+
+class OwnerAddBook(StatesGroup):
+    """Store-owner flow for adding a free-text (non-catalogue) available book.
+
+    FSM data carries `store_id` (which store the book is being added to) and,
+    between the two steps, the entered `title`.
+    """
+
+    title = State()
+    author = State()

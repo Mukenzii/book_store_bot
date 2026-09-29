@@ -35,17 +35,28 @@ async def _has_phone(user_id: int) -> bool:
     return bool(user and user.phone)
 
 
+async def _owner_hint(message: Message, phone: str | None) -> None:
+    """If this phone owns a store, point them at the owner panel (/dokonim)."""
+    if phone and await repo.stores_owned_by_phone(phone):
+        await message.answer(
+            "🏪 Sizga do‘kon biriktirilgan. Do‘koningizdagi mavjud kitoblarni "
+            "boshqarish uchun /dokonim buyrug‘ini yuboring."
+        )
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()
     # First visit (no phone on file) → ask for it. Returning user → recognised.
     # One send per branch (not two) — on a slow link each Telegram round-trip
     # adds latency, so we greet + guide in a single message.
-    if await _has_phone(message.from_user.id):
+    user = await repo.get_user(message.from_user.id)
+    if user and user.phone:
         await message.answer(
             f"Xush kelibsiz, {message.from_user.first_name}!\n\n{WELCOME}",
             reply_markup=request_location_kb(),
         )
+        await _owner_hint(message, user.phone)
     else:
         await message.answer(ASK_PHONE, reply_markup=request_phone_kb())
 
@@ -67,6 +78,7 @@ async def on_contact(message: Message, state: FSMContext) -> None:
         f"✅ Rahmat! Ro‘yxatdan o‘tdingiz.\n\n{WELCOME}",
         reply_markup=request_location_kb(),
     )
+    await _owner_hint(message, contact.phone_number)
 
 
 @router.message(Command("help"))
