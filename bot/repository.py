@@ -600,6 +600,11 @@ async def list_store_books(store_id: int) -> list[StoreBook]:
         return list(await session.scalars(stmt))
 
 
+async def get_store_book(sb_id: int) -> StoreBook | None:
+    async with session_factory() as session:
+        return await session.get(StoreBook, sb_id)
+
+
 async def delete_store_book(sb_id: int, store_id: int) -> bool:
     """Delete a store-book, but only if it belongs to that store (owner scope)."""
     async with session_factory() as session:

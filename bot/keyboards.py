@@ -488,3 +488,21 @@ def test_mode_kb(
         rows.append([InlineKeyboardButton(text=text[:64], callback_data=FeatureCB(action=action, key=key).pack())])
     rows.append([InlineKeyboardButton(text="Orqaga", callback_data=AdminMenu(action="menu").pack())])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# --- customer: books on a store card ----------------------------------------
+
+class StoreBookView(CallbackData, prefix="sbv"):
+    sb_id: int
+
+
+def store_books_kb(books: list) -> InlineKeyboardMarkup:
+    """One button per available book; tapping shows the book's details."""
+    rows = [
+        [InlineKeyboardButton(
+            text=(f"{b.title} — {b.author}" if b.author else b.title)[:60],
+            callback_data=StoreBookView(sb_id=b.id).pack(),
+        )]
+        for b in books
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
