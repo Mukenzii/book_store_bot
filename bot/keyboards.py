@@ -481,14 +481,14 @@ class FeatureCB(CallbackData, prefix="feat"):
 def test_mode_kb(is_tester: bool, stages: dict[str, tuple[str, str]]) -> InlineKeyboardMarkup:
     """stages: key -> (name, stage). One row per feature to release / pull back."""
     rows = [[InlineKeyboardButton(
-        text="🧪 Men uchun test rejimi: " + ("✅ YOQILGAN" if is_tester else "❌ O‘CHIQ"),
+        text="Men uchun test rejimi: " + ("yoqilgan" if is_tester else "o‘chiq"),
         callback_data=FeatureCB(action="me").pack(),
     )]]
     for key, (name, stage) in stages.items():
         if stage == "test":
-            text, action = f"🚀 Hammaga chiqarish: {name}", "live"
+            text, action = f"Hammaga chiqarish: {name}", "live"
         else:
-            text, action = f"↩️ Testga qaytarish: {name}", "test"
+            text, action = f"Testga qaytarish: {name}", "test"
         rows.append([InlineKeyboardButton(text=text[:64], callback_data=FeatureCB(action=action, key=key).pack())])
-    rows.append([InlineKeyboardButton(text="🔙 Menyu", callback_data=AdminMenu(action="menu").pack())])
+    rows.append([InlineKeyboardButton(text="Orqaga", callback_data=AdminMenu(action="menu").pack())])
     return InlineKeyboardMarkup(inline_keyboard=rows)

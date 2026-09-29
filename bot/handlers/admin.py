@@ -886,16 +886,15 @@ def _test_mode_view(user_id: int):
     stages = {k: (name, features.stage(k)) for k, name in features.FEATURES.items()}
     on = features.is_tester(user_id)
     lines = [
-        "🧪 <b>Test rejimi</b>",
+        "<b>Test rejimi</b>",
         "Yangi funksiyalar avval faqat test rejimini yoqqan adminlarga ko‘rinadi. "
-        "Sinab ko‘rgach — «🚀 Hammaga chiqarish».",
+        "Sinab ko‘rgach, «Hammaga chiqarish» tugmasini bosing.",
         "",
-        f"Siz uchun: {'✅ yoqilgan — test funksiyalarini ko‘rasiz' if on else '❌ o‘chiq'}",
+        f"Siz uchun: {'yoqilgan' if on else 'o‘chiq'}",
         "",
     ]
     for name, stage in stages.values():
-        badge = "🧪 test (faqat testerlar)" if stage == features.TEST else "🚀 hammaga ochiq"
-        lines.append(f"• {_escape(name)} — {badge}")
+        lines.append(f"• {_escape(name)}: {'test' if stage == features.TEST else 'hammaga ochiq'}")
     return "\n".join(lines), test_mode_kb(on, stages)
 
 
@@ -909,10 +908,10 @@ async def on_feature(callback: CallbackQuery, callback_data: FeatureCB) -> None:
     uid = callback.from_user.id
     if callback_data.action == "me":
         await features.set_tester(uid, not features.is_tester(uid))
-        await callback.answer("Test rejimi yoqildi 🧪" if features.is_tester(uid) else "Test rejimi o‘chirildi")
+        await callback.answer("Test rejimi yoqildi" if features.is_tester(uid) else "Test rejimi o‘chirildi")
     elif callback_data.key in features.FEATURES and callback_data.action in (features.LIVE, features.TEST):
         await features.set_stage(callback_data.key, callback_data.action)
-        await callback.answer("Hammaga chiqarildi 🚀" if callback_data.action == features.LIVE else "Testga qaytarildi ↩️")
+        await callback.answer("Hammaga chiqarildi" if callback_data.action == features.LIVE else "Testga qaytarildi")
     else:
         await callback.answer()
         return
