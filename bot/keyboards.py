@@ -256,6 +256,7 @@ def admin_store_kb(store_id: int) -> InlineKeyboardMarkup:
              InlineKeyboardButton(text="✏️ Tavsif", callback_data=AdminField(store_id=store_id, field="description").pack())],
             [InlineKeyboardButton(text="📍 Joylashuv", callback_data=AdminField(store_id=store_id, field="location").pack())],
             [InlineKeyboardButton(text="🗑 O‘chirish", callback_data=AdminStore(action="delete", store_id=store_id).pack())],
+            [InlineKeyboardButton(text="Egasi sifatida sinash", callback_data=FeatureCB(action="owner", key=str(store_id)).pack())],
             [InlineKeyboardButton(text="📋 Ro‘yxatga qaytish", callback_data=AdminPage(offset=0).pack())],
         ]
     )
@@ -478,12 +479,18 @@ class FeatureCB(CallbackData, prefix="feat"):
     key: str = "-"  # "-" for the per-user "me" toggle (empty would unpack as None)
 
 
-def test_mode_kb(is_tester: bool, stages: dict[str, tuple[str, str]]) -> InlineKeyboardMarkup:
+def test_mode_kb(
+    is_tester: bool, stages: dict[str, tuple[str, str]], acting_owner: bool = False
+) -> InlineKeyboardMarkup:
     """stages: key -> (name, stage). One row per feature to release / pull back."""
     rows = [[InlineKeyboardButton(
         text="Men uchun test rejimi: " + ("yoqilgan" if is_tester else "o‘chiq"),
         callback_data=FeatureCB(action="me").pack(),
     )]]
+    if acting_owner:
+        rows.append([InlineKeyboardButton(
+            text="Foydalanuvchi roliga qaytish", callback_data=FeatureCB(action="user").pack(),
+        )])
     for key, (name, stage) in stages.items():
         if stage == "test":
             text, action = f"Hammaga chiqarish: {name}", "live"

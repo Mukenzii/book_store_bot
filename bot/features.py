@@ -26,6 +26,13 @@ _TESTERS_KEY = "tester_ids"
 
 _stages: dict[str, str] = {}
 _testers: set[int] = set()
+# Role a tester is acting as: missing = regular user; "owner:<store_id>" =
+# owner of that store (lets them test owner features with no phone match).
+_roles: dict[int, str] = {}
+
+
+def _role_key(user_id: int) -> str:
+    return f"test_role:{user_id}"
 
 
 def _stage_key(key: str) -> str:
@@ -38,6 +45,10 @@ async def load() -> None:
         _stages[key] = await repo.get_setting(_stage_key(key), TEST) or TEST
     raw = await repo.get_setting(_TESTERS_KEY, "") or ""
     _testers = {int(x) for x in raw.split(",") if x.strip().isdigit()}
+    for uid in _testers:
+        role = await repo.get_setting(_role_key(uid), "") or ""
+        if role:
+            _roles[uid] = role
 
 
 def stage(key: str) -> str:
@@ -65,3 +76,25 @@ async def set_tester(user_id: int, on: bool) -> None:
     else:
         _testers.discard(user_id)
     await repo.set_setting(_TESTERS_KEY, ",".join(str(i) for i in sorted(_testers)))
+
+
+def acting_owner_store(user_id: int) -> int | None:
+    """Store id the tester is impersonating the owner of, or None."""
+    if user_id not in _testers:
+        return None
+    role = _roles.get(user_id, "")
+    if role.startswith("owner:") and role[6:].isdigit():
+        return int(role[6:])
+    return None
+
+
+async def set_owner_role(user_id: int, store_id: int | None) -> None:
+    """Act as owner of `store_id` (turns test mode on), or None = back to user."""
+    if store_id is None:
+        _roles.pop(user_id, None)
+        await repo.set_setting(_role_key(user_id), "")
+        return
+    _roles[user_id] = f"owner:{store_id}"
+    await repo.set_setting(_role_key(user_id), _roles[user_id])
+    if user_id not in _testers:
+        await set_tester(user_id, True)

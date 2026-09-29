@@ -58,15 +58,25 @@ async def _show_panel(message: Message, store) -> None:
     await message.answer(await _panel_text(store), reply_markup=owner_panel_kb(store.id))
 
 
-async def _owned_store(user_id: int, store_id: int):
-    """Re-check ownership on every action so a callback can't touch a store the
-    user's phone no longer matches (or a feature still in testing)."""
-    if not features.enabled("store_books", user_id):
-        return None
+async def _my_stores(user_id: int) -> list | None:
+    """Stores this user owns. A tester acting as a store's owner (test mode)
+    gets that store; everyone else is matched by phone. None = no phone yet."""
+    sid = features.acting_owner_store(user_id)
+    if sid is not None:
+        store = await repo.get_store_by_id(sid)
+        return [store] if store else []
     user = await repo.get_user(user_id)
     if not (user and user.phone):
         return None
-    for s in await repo.stores_owned_by_phone(user.phone):
+    return await repo.stores_owned_by_phone(user.phone)
+
+
+async def _owned_store(user_id: int, store_id: int):
+    """Re-check ownership on every action so a callback can't touch a store the
+    user doesn't own (or a feature still in testing)."""
+    if not features.enabled("store_books", user_id):
+        return None
+    for s in await _my_stores(user_id) or []:
         if s.id == store_id:
             return s
     return None
@@ -78,11 +88,10 @@ async def cmd_my_store(message: Message, state: FSMContext) -> None:
     if not features.enabled("store_books", message.from_user.id):
         await message.answer("Bu funksiya tez orada ishga tushadi.")
         return
-    user = await repo.get_user(message.from_user.id)
-    if not (user and user.phone):
+    stores = await _my_stores(message.from_user.id)
+    if stores is None:
         await message.answer(_NO_PHONE)
         return
-    stores = await repo.stores_owned_by_phone(user.phone)
     if not stores:
         await message.answer(_NOT_OWNER)
         return

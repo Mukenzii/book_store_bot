@@ -882,40 +882,67 @@ async def on_admin_remove_confirm(callback: CallbackQuery, callback_data: AdminM
 
 # --- test mode: ship features to testers first, then release -------------
 
-def _test_mode_view(user_id: int):
+async def _test_mode_view(user_id: int):
     stages = {k: (name, features.stage(k)) for k, name in features.FEATURES.items()}
     on = features.is_tester(user_id)
+    sid = features.acting_owner_store(user_id)
+    if sid is not None:
+        store = await repo.get_store_by_id(sid)
+        role = f"do‘kon egasi — #{sid} {_escape(store.name) if store else '(o‘chirilgan)'}"
+    else:
+        role = "oddiy foydalanuvchi"
     lines = [
         "<b>Test rejimi</b>",
-        "Yangi funksiyalar avval faqat test rejimini yoqqan adminlarga ko‘rinadi. "
+        "Test rejimida yangi funksiyalarni o‘sha rolda turib sinaysiz. "
         "Sinab ko‘rgach, «Hammaga chiqarish» tugmasini bosing.",
         "",
-        f"Siz uchun: {'yoqilgan' if on else 'o‘chiq'}",
+        f"Test rejimi: {'yoqilgan' if on else 'o‘chiq'}",
+        f"Rolingiz: {role}",
+        "",
+        "Do‘kon egasi bo‘lib sinash uchun: Do‘konlar ro‘yxati → do‘konni oching → "
+        "«Egasi sifatida sinash». So‘ng /dokonim yuboring.",
         "",
     ]
     for name, stage in stages.values():
         lines.append(f"• {_escape(name)}: {'test' if stage == features.TEST else 'hammaga ochiq'}")
-    return "\n".join(lines), test_mode_kb(on, stages)
+    return "\n".join(lines), test_mode_kb(on, stages, acting_owner=sid is not None)
 
 
 async def _show_test_mode(message: Message, user_id: int) -> None:
-    text, kb = _test_mode_view(user_id)
+    text, kb = await _test_mode_view(user_id)
     await message.answer(text, reply_markup=kb)
 
 
 @router.callback_query(FeatureCB.filter())
 async def on_feature(callback: CallbackQuery, callback_data: FeatureCB) -> None:
     uid = callback.from_user.id
-    if callback_data.action == "me":
+    action = callback_data.action
+    if action == "owner" and callback_data.key.isdigit():
+        store = await repo.get_store_by_id(int(callback_data.key))
+        if store is None:
+            await callback.answer("Do‘kon topilmadi", show_alert=True)
+            return
+        await features.set_owner_role(uid, store.id)
+        await callback.answer("Endi siz shu do‘kon egasisiz")
+        await callback.message.answer(
+            f"Test rejimi: siz endi <b>#{store.id} {_escape(store.name)}</b> do‘konining egasisiz.\n"
+            "Egasi ko‘radigan panelni ochish uchun /dokonim yuboring.\n"
+            "Qaytish: /admin → Test rejimi → «Foydalanuvchi roliga qaytish»."
+        )
+        return
+    if action == "user":
+        await features.set_owner_role(uid, None)
+        await callback.answer("Oddiy foydalanuvchi roliga qaytdingiz")
+    elif action == "me":
         await features.set_tester(uid, not features.is_tester(uid))
         await callback.answer("Test rejimi yoqildi" if features.is_tester(uid) else "Test rejimi o‘chirildi")
-    elif callback_data.key in features.FEATURES and callback_data.action in (features.LIVE, features.TEST):
-        await features.set_stage(callback_data.key, callback_data.action)
-        await callback.answer("Hammaga chiqarildi" if callback_data.action == features.LIVE else "Testga qaytarildi")
+    elif callback_data.key in features.FEATURES and action in (features.LIVE, features.TEST):
+        await features.set_stage(callback_data.key, action)
+        await callback.answer("Hammaga chiqarildi" if action == features.LIVE else "Testga qaytarildi")
     else:
         await callback.answer()
         return
-    text, kb = _test_mode_view(uid)
+    text, kb = await _test_mode_view(uid)
     try:
         await callback.message.edit_text(text, reply_markup=kb)
     except Exception:  # noqa: BLE001 — unchanged/expired message: send fresh
