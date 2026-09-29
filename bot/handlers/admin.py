@@ -27,7 +27,6 @@ from bot.keyboards import (
     SchedMenu,
     SchedPick,
     SchedPost,
-    StoreBookMod,
     admin_confirm_delete_kb,
     admin_list_kb,
     admin_menu_kb,
@@ -45,7 +44,6 @@ from bot.keyboards import (
     scheduled_confirm_delete_kb,
     scheduled_list_kb,
     scheduled_post_kb,
-    store_book_mod_kb,
     test_mode_kb,
 )
 from bot import geo
@@ -162,7 +160,6 @@ async def _menu_text() -> str:
     online_10m = await repo.count_active_within(10)
     active_today = await repo.count_active_within(24 * 60)
     active_week = await repo.count_active_within(7 * 24 * 60)
-    pending_books = await repo.count_pending_store_books()
     text = (
         "🛠 <b>Admin panel</b>\n"
         f"📚 Do‘konlar: <b>{stores}</b>\n"
@@ -173,8 +170,6 @@ async def _menu_text() -> str:
         f"• Bugun: <b>{active_today}</b>\n"
         f"• Bu hafta: <b>{active_week}</b>"
     )
-    if pending_books:
-        text += f"\n\n⏳ <b>{pending_books}</b> ta do‘kon kitobi tasdiqlashni kutmoqda"
     return text
 
 
@@ -241,9 +236,6 @@ async def on_menu(callback: CallbackQuery, callback_data: AdminMenu, state: FSMC
         return
     if callback_data.action == "testmode":
         await _show_test_mode(callback.message, callback.from_user.id)
-        return
-    if callback_data.action == "approvebooks":
-        await _show_pending_books(callback.message)
         return
     if callback_data.action == "menu":
         await state.clear()
@@ -949,39 +941,6 @@ async def on_feature(callback: CallbackQuery, callback_data: FeatureCB) -> None:
         await callback.message.edit_text(text, reply_markup=kb)
     except Exception:  # noqa: BLE001 — unchanged/expired message: send fresh
         await callback.message.answer(text, reply_markup=kb)
-
-
-# --- store-owner books: approval queue --------------------------------------
-
-async def _show_pending_books(message: Message) -> None:
-    pending = await repo.pending_store_books()
-    if not pending:
-        await message.answer(
-            "⏳ Tasdiq kutayotgan kitob yo‘q.", reply_markup=admin_menu_kb(is_super=True)
-        )
-        return
-    total = await repo.count_pending_store_books()
-    await message.answer(f"⏳ <b>Tasdiq kutayotgan kitoblar</b> ({total} ta):")
-    for sb, store in pending:
-        author = f" — {_escape(sb.author)}" if sb.author else ""
-        await message.answer(
-            f"🏪 <b>{_escape(store.name)}</b>\n📖 {_escape(sb.title)}{author}",
-            reply_markup=store_book_mod_kb(sb.id),
-        )
-
-
-@router.callback_query(StoreBookMod.filter())
-async def on_store_book_mod(callback: CallbackQuery, callback_data: StoreBookMod) -> None:
-    if callback_data.action == "approve":
-        ok = await repo.approve_store_book(callback_data.sb_id)
-        await callback.answer("Tasdiqlandi ✅" if ok else "Topilmadi")
-    else:
-        ok = await repo.reject_store_book(callback_data.sb_id)
-        await callback.answer("Rad etildi 🗑" if ok else "Topilmadi")
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:  # noqa: BLE001 — markup already gone is harmless
-        pass
 
 
 # --- books (the AI assistant's catalogue) -----------------------------------

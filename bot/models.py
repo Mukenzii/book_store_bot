@@ -148,7 +148,7 @@ class StoreBook(Base):
     owner's key — a Telegram user whose shared phone matches it manages that
     store's books here. Each row either references a catalogue Book (`book_id`)
     or is a free-text entry; `title`/`author` are denormalised for display.
-    A row is hidden from customers until a super-admin sets `approved`.
+    Books are visible to customers as soon as the owner adds them.
     """
 
     __tablename__ = "store_books"
@@ -159,7 +159,7 @@ class StoreBook(Base):
     book_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     title: Mapped[str] = mapped_column(String(300))
     author: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # Hidden from customers until a super-admin approves it.
+    # Unused: owner-added books go live immediately (approval was removed).
     approved: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     added_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

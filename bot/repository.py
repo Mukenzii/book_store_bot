@@ -559,7 +559,7 @@ async def add_store_book(
     author: str | None,
     added_by: int | None,
 ) -> StoreBook | None:
-    """Add a book to a store's availability list (pending approval).
+    """Add a book to a store's availability list (visible to customers at once).
 
     Returns None if the same book (by catalogue id, or by normalised title) is
     already listed for that store — no duplicates.
@@ -592,13 +592,10 @@ async def add_store_book(
         return sb
 
 
-async def list_store_books(store_id: int, *, approved_only: bool = False) -> list[StoreBook]:
+async def list_store_books(store_id: int) -> list[StoreBook]:
     from sqlalchemy import select
 
-    stmt = select(StoreBook).where(StoreBook.store_id == store_id)
-    if approved_only:
-        stmt = stmt.where(StoreBook.approved.is_(True))
-    stmt = stmt.order_by(StoreBook.title)
+    stmt = select(StoreBook).where(StoreBook.store_id == store_id).order_by(StoreBook.title)
     async with session_factory() as session:
         return list(await session.scalars(stmt))
 
@@ -608,55 +605,6 @@ async def delete_store_book(sb_id: int, store_id: int) -> bool:
     async with session_factory() as session:
         sb = await session.get(StoreBook, sb_id)
         if sb is None or sb.store_id != store_id:
-            return False
-        await session.delete(sb)
-        await session.commit()
-        return True
-
-
-async def pending_store_books(limit: int = 20) -> list[tuple[StoreBook, Store]]:
-    """Un-approved store-books with their store, for the admin approval queue."""
-    from sqlalchemy import select
-
-    async with session_factory() as session:
-        rows = (
-            await session.execute(
-                select(StoreBook, Store)
-                .join(Store, Store.id == StoreBook.store_id)
-                .where(StoreBook.approved.is_(False))
-                .order_by(StoreBook.created_at)
-                .limit(limit)
-            )
-        ).all()
-    return [(sb, st) for sb, st in rows]
-
-
-async def count_pending_store_books() -> int:
-    from sqlalchemy import func, select
-
-    async with session_factory() as session:
-        return int(
-            await session.scalar(
-                select(func.count()).select_from(StoreBook).where(StoreBook.approved.is_(False))
-            )
-            or 0
-        )
-
-
-async def approve_store_book(sb_id: int) -> bool:
-    async with session_factory() as session:
-        sb = await session.get(StoreBook, sb_id)
-        if sb is None:
-            return False
-        sb.approved = True
-        await session.commit()
-        return True
-
-
-async def reject_store_book(sb_id: int) -> bool:
-    async with session_factory() as session:
-        sb = await session.get(StoreBook, sb_id)
-        if sb is None:
             return False
         await session.delete(sb)
         await session.commit()

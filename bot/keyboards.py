@@ -170,7 +170,6 @@ def admin_menu_kb(is_super: bool = True) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="➕ Do‘kon qo‘shish", callback_data=AdminMenu(action="add").pack())],
             [InlineKeyboardButton(text="📋 Do‘konlar ro‘yxati", callback_data=AdminMenu(action="list").pack())],
             [InlineKeyboardButton(text="📥 Google Sheets’dan import", callback_data=AdminMenu(action="sheetimport").pack())],
-            [InlineKeyboardButton(text="✅ Do‘kon kitoblarini tasdiqlash", callback_data=AdminMenu(action="approvebooks").pack())],
             [InlineKeyboardButton(text="📢 Hammaga xabar yuborish", callback_data=AdminMenu(action="broadcast").pack())],
             [InlineKeyboardButton(text="📖 Kitoblar (AI)", callback_data=AdminMenu(action="books").pack())],
             [InlineKeyboardButton(text="📅 Rejalashtirilgan postlar", callback_data=AdminMenu(action="schedule").pack())],
@@ -407,10 +406,6 @@ class OwnerDel(CallbackData, prefix="owndel"):
     sb_id: int
 
 
-class StoreBookMod(CallbackData, prefix="sbmod"):
-    action: str  # approve | reject
-    sb_id: int
-
 
 def owner_stores_kb(stores: list) -> InlineKeyboardMarkup:
     """Pick which of the owner's stores to manage (when they have several)."""
@@ -436,7 +431,7 @@ def owner_books_kb(store_id: int, books: list) -> InlineKeyboardMarkup:
     """Owner's book list — each row removes that book; plus a back button."""
     rows = [
         [InlineKeyboardButton(
-            text=f"🗑 {'✅' if b.approved else '⏳'} {b.title}"[:60],
+            text=f"🗑 {b.title}"[:60],
             callback_data=OwnerDel(store_id=store_id, sb_id=b.id).pack(),
         )]
         for b in books
@@ -446,7 +441,7 @@ def owner_books_kb(store_id: int, books: list) -> InlineKeyboardMarkup:
 
 
 def owner_catalog_kb(store_id: int, books: list, offset: int, total: int) -> InlineKeyboardMarkup:
-    """One page of catalogue books; tap to add to the store (pending approval)."""
+    """One page of catalogue books; tap to add to the store."""
     rows = [
         [InlineKeyboardButton(
             text=f"➕ {b.title}"[:60],
@@ -464,12 +459,6 @@ def owner_catalog_kb(store_id: int, books: list, offset: int, total: int) -> Inl
     rows.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data=OwnerMenu(action="panel", store_id=store_id).pack())])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
-
-def store_book_mod_kb(sb_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=StoreBookMod(action="approve", sb_id=sb_id).pack()),
-        InlineKeyboardButton(text="🗑 Rad etish", callback_data=StoreBookMod(action="reject", sb_id=sb_id).pack()),
-    ]])
 
 
 # --- test mode / feature flags ----------------------------------------------

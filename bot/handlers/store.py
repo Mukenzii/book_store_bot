@@ -41,9 +41,9 @@ async def show_store(
     await callback.answer()
 
     details = format_store_details(store)
-    # Append the store's approved available books, if any.
+    # Append the store's available books, if any.
     books = (
-        await list_store_books(store.id, approved_only=True)
+        await list_store_books(store.id)
         if features.enabled("store_books", callback.from_user.id)
         else []
     )

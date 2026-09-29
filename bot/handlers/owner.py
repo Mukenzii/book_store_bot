@@ -3,8 +3,7 @@
 Ownership is by phone (the owner's idea): a store's admin-entered `phone` is the
 owner's key. A Telegram user opens /dokonim; if their shared phone matches one
 or more stores, they can add books (from the catalogue or free-text) to those
-stores. Every added book is pending until a super-admin approves it, after which
-it shows to customers on the store's card.
+stores. Added books show to customers on the store's card immediately.
 """
 
 from html import escape
@@ -44,12 +43,9 @@ _NO_PHONE = (
 
 async def _panel_text(store) -> str:
     books = await repo.list_store_books(store.id)
-    approved = sum(1 for b in books if b.approved)
-    pending = len(books) - approved
     return (
         f"🏪 <b>{escape(store.name)}</b>\n"
-        f"✅ Tasdiqlangan kitoblar: <b>{approved}</b>\n"
-        f"⏳ Tasdiq kutayotgan: <b>{pending}</b>\n\n"
+        f"Mavjud kitoblar: <b>{len(books)}</b>\n\n"
         "Quyidagidan birini tanlang:"
     )
 
@@ -133,7 +129,7 @@ async def on_my_books(callback: CallbackQuery, callback_data: OwnerMenu) -> None
         )
         return
     await callback.message.answer(
-        "📚 <b>Kitoblaringiz</b> (✅ tasdiqlangan · ⏳ kutilmoqda). O‘chirish uchun bosing:",
+        "📚 <b>Kitoblaringiz</b>. O‘chirish uchun bosing:",
         reply_markup=owner_books_kb(store.id, books),
     )
 
@@ -201,7 +197,7 @@ async def on_add_book(callback: CallbackQuery, callback_data: OwnerAdd) -> None:
         store.id, book_id=book.id, title=book.title, author=book.author,
         added_by=callback.from_user.id,
     )
-    await callback.answer("Qo‘shildi ✅ (tasdiq kutilmoqda)" if sb else "Bu kitob allaqachon qo‘shilgan")
+    await callback.answer("Qo‘shildi" if sb else "Bu kitob allaqachon qo‘shilgan")
 
 
 @router.callback_query(OwnerMenu.filter(F.action == "addcustom"))
@@ -242,7 +238,7 @@ async def custom_author(message: Message, state: FSMContext) -> None:
         added_by=message.from_user.id,
     )
     if sb:
-        await message.answer("✅ Qo‘shildi — administrator tasdiqlagach mijozlarga ko‘rinadi.")
+        await message.answer("Qo‘shildi — mijozlar uni do‘kon kartasida ko‘radi.")
     else:
         await message.answer("Bu kitob allaqachon ro‘yxatda bor.")
     await _show_panel(message, store)
