@@ -3,6 +3,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from bot import features
 from bot import repository as repo
 from bot.keyboards import request_location_kb, request_phone_kb
 
@@ -37,6 +38,8 @@ async def _has_phone(user_id: int) -> bool:
 
 async def _owner_hint(message: Message, phone: str | None) -> None:
     """If this phone owns a store, point them at the owner panel (/dokonim)."""
+    if not features.enabled("store_books", message.from_user.id):
+        return
     if phone and await repo.stores_owned_by_phone(phone):
         await message.answer(
             "🏪 Sizga do‘kon biriktirilgan. Do‘koningizdagi mavjud kitoblarni "

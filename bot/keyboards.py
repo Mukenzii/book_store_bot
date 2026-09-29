@@ -175,6 +175,7 @@ def admin_menu_kb(is_super: bool = True) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="📖 Kitoblar (AI)", callback_data=AdminMenu(action="books").pack())],
             [InlineKeyboardButton(text="📅 Rejalashtirilgan postlar", callback_data=AdminMenu(action="schedule").pack())],
             [InlineKeyboardButton(text="👑 Adminlar", callback_data=AdminMenu(action="admins").pack())],
+            [InlineKeyboardButton(text="🧪 Test rejimi", callback_data=AdminMenu(action="testmode").pack())],
             [InlineKeyboardButton(text="✖️ Yopish", callback_data=AdminMenu(action="close").pack())],
         ]
     )
@@ -468,3 +469,26 @@ def store_book_mod_kb(sb_id: int) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=StoreBookMod(action="approve", sb_id=sb_id).pack()),
         InlineKeyboardButton(text="🗑 Rad etish", callback_data=StoreBookMod(action="reject", sb_id=sb_id).pack()),
     ]])
+
+
+# --- test mode / feature flags ----------------------------------------------
+
+class FeatureCB(CallbackData, prefix="feat"):
+    action: str  # me | live | test
+    key: str = "-"  # "-" for the per-user "me" toggle (empty would unpack as None)
+
+
+def test_mode_kb(is_tester: bool, stages: dict[str, tuple[str, str]]) -> InlineKeyboardMarkup:
+    """stages: key -> (name, stage). One row per feature to release / pull back."""
+    rows = [[InlineKeyboardButton(
+        text="🧪 Men uchun test rejimi: " + ("✅ YOQILGAN" if is_tester else "❌ O‘CHIQ"),
+        callback_data=FeatureCB(action="me").pack(),
+    )]]
+    for key, (name, stage) in stages.items():
+        if stage == "test":
+            text, action = f"🚀 Hammaga chiqarish: {name}", "live"
+        else:
+            text, action = f"↩️ Testga qaytarish: {name}", "test"
+        rows.append([InlineKeyboardButton(text=text[:64], callback_data=FeatureCB(action=action, key=key).pack())])
+    rows.append([InlineKeyboardButton(text="🔙 Menyu", callback_data=AdminMenu(action="menu").pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)

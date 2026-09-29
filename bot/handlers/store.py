@@ -4,6 +4,7 @@ from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
+from bot import features
 from bot.formatting import format_store_details
 from bot.keyboards import StoreCallback
 from bot.repository import get_store, list_store_books
@@ -41,7 +42,11 @@ async def show_store(
 
     details = format_store_details(store)
     # Append the store's approved available books, if any.
-    books = await list_store_books(store.id, approved_only=True)
+    books = (
+        await list_store_books(store.id, approved_only=True)
+        if features.enabled("store_books", callback.from_user.id)
+        else []
+    )
     if books:
         lines = ["", "📚 <b>Mavjud kitoblar:</b>"]
         for b in books[:_MAX_CARD_BOOKS]:

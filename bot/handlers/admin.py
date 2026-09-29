@@ -6,7 +6,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
-from bot import admins
+from bot import admins, features
 from bot.broadcast import broadcast_copy
 from bot.config import settings
 from bot.filters import IsAdmin
@@ -22,6 +22,7 @@ from bot.keyboards import (
     BookItem,
     BookMenu,
     BroadcastCB,
+    FeatureCB,
     SchedDay,
     SchedMenu,
     SchedPick,
@@ -45,6 +46,7 @@ from bot.keyboards import (
     scheduled_list_kb,
     scheduled_post_kb,
     store_book_mod_kb,
+    test_mode_kb,
 )
 from bot import geo
 from bot import repository as repo
@@ -236,6 +238,9 @@ async def on_menu(callback: CallbackQuery, callback_data: AdminMenu, state: FSMC
             f"📍 Joylashuvsiz (o‘tkazib yuborildi): {summary.no_location}",
             reply_markup=admin_menu_kb(is_super=True),
         )
+        return
+    if callback_data.action == "testmode":
+        await _show_test_mode(callback.message, callback.from_user.id)
         return
     if callback_data.action == "approvebooks":
         await _show_pending_books(callback.message)
@@ -873,6 +878,49 @@ async def on_admin_remove_confirm(callback: CallbackQuery, callback_data: AdminM
     await callback.answer("Olib tashlandi" if ok else "Topilmadi", show_alert=True)
     text, kb = await _admins_view(callback.from_user.id)
     await callback.message.answer(text, reply_markup=kb)
+
+
+# --- test mode: ship features to testers first, then release -------------
+
+def _test_mode_view(user_id: int):
+    stages = {k: (name, features.stage(k)) for k, name in features.FEATURES.items()}
+    on = features.is_tester(user_id)
+    lines = [
+        "🧪 <b>Test rejimi</b>",
+        "Yangi funksiyalar avval faqat test rejimini yoqqan adminlarga ko‘rinadi. "
+        "Sinab ko‘rgach — «🚀 Hammaga chiqarish».",
+        "",
+        f"Siz uchun: {'✅ yoqilgan — test funksiyalarini ko‘rasiz' if on else '❌ o‘chiq'}",
+        "",
+    ]
+    for name, stage in stages.values():
+        badge = "🧪 test (faqat testerlar)" if stage == features.TEST else "🚀 hammaga ochiq"
+        lines.append(f"• {_escape(name)} — {badge}")
+    return "\n".join(lines), test_mode_kb(on, stages)
+
+
+async def _show_test_mode(message: Message, user_id: int) -> None:
+    text, kb = _test_mode_view(user_id)
+    await message.answer(text, reply_markup=kb)
+
+
+@router.callback_query(FeatureCB.filter())
+async def on_feature(callback: CallbackQuery, callback_data: FeatureCB) -> None:
+    uid = callback.from_user.id
+    if callback_data.action == "me":
+        await features.set_tester(uid, not features.is_tester(uid))
+        await callback.answer("Test rejimi yoqildi 🧪" if features.is_tester(uid) else "Test rejimi o‘chirildi")
+    elif callback_data.key in features.FEATURES and callback_data.action in (features.LIVE, features.TEST):
+        await features.set_stage(callback_data.key, callback_data.action)
+        await callback.answer("Hammaga chiqarildi 🚀" if callback_data.action == features.LIVE else "Testga qaytarildi ↩️")
+    else:
+        await callback.answer()
+        return
+    text, kb = _test_mode_view(uid)
+    try:
+        await callback.message.edit_text(text, reply_markup=kb)
+    except Exception:  # noqa: BLE001 — unchanged/expired message: send fresh
+        await callback.message.answer(text, reply_markup=kb)
 
 
 # --- store-owner books: approval queue --------------------------------------

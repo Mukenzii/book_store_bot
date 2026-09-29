@@ -14,6 +14,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from bot import features
 from bot import repository as repo
 from bot.keyboards import (
     PAGE_SIZE,
@@ -59,7 +60,9 @@ async def _show_panel(message: Message, store) -> None:
 
 async def _owned_store(user_id: int, store_id: int):
     """Re-check ownership on every action so a callback can't touch a store the
-    user's phone no longer matches."""
+    user's phone no longer matches (or a feature still in testing)."""
+    if not features.enabled("store_books", user_id):
+        return None
     user = await repo.get_user(user_id)
     if not (user and user.phone):
         return None
@@ -72,6 +75,9 @@ async def _owned_store(user_id: int, store_id: int):
 @router.message(Command("dokonim"))
 async def cmd_my_store(message: Message, state: FSMContext) -> None:
     await state.clear()
+    if not features.enabled("store_books", message.from_user.id):
+        await message.answer("Bu funksiya tez orada ishga tushadi.")
+        return
     user = await repo.get_user(message.from_user.id)
     if not (user and user.phone):
         await message.answer(_NO_PHONE)

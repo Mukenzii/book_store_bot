@@ -10,7 +10,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ErrorEvent
 
-from bot import admins
+from bot import admins, features
 from bot.config import settings
 from bot.database import engine, init_db
 from bot.handlers import get_root_router
@@ -149,6 +149,7 @@ async def main() -> None:
 
     await init_db()
     await admins.load()  # warm the dynamic-admin cache
+    await features.load()  # feature-flag stages + testers
     logger.info("Database ready. Starting Book Store bot…")
 
     heartbeat = asyncio.create_task(_heartbeat())
