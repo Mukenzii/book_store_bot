@@ -42,6 +42,7 @@ _NEAREST_SQL = text(
             ))
         )) AS distance_km
     FROM stores
+    WHERE NOT is_test
     ORDER BY distance_km ASC
     LIMIT :limit
     """
@@ -100,7 +101,9 @@ async def count_stores() -> int:
     from sqlalchemy import func, select
 
     async with session_factory() as session:
-        return await session.scalar(select(func.count()).select_from(Store)) or 0
+        return await session.scalar(
+            select(func.count()).select_from(Store).where(Store.is_test.is_(False))
+        ) or 0
 
 
 async def list_stores(limit: int, offset: int) -> list[Store]:
@@ -108,7 +111,11 @@ async def list_stores(limit: int, offset: int) -> list[Store]:
 
     async with session_factory() as session:
         result = await session.scalars(
-            select(Store).order_by(Store.id).limit(limit).offset(offset)
+            select(Store)
+            .where(Store.is_test.is_(False))
+            .order_by(Store.id)
+            .limit(limit)
+            .offset(offset)
         )
         return list(result)
 
@@ -654,3 +661,23 @@ async def reject_store_book(sb_id: int) -> bool:
         await session.delete(sb)
         await session.commit()
         return True
+
+
+async def get_or_create_test_store() -> Store:
+    """The single private store used by test mode (hidden from customers)."""
+    from sqlalchemy import select
+
+    async with session_factory() as session:
+        store = await session.scalar(select(Store).where(Store.is_test.is_(True)).limit(1))
+        if store is None:
+            store = Store(
+                name="Test do‘kon",
+                address="Test rejimi uchun — mijozlarga ko‘rinmaydi",
+                latitude=41.311081,
+                longitude=69.240562,
+                is_test=True,
+            )
+            session.add(store)
+            await session.commit()
+            await session.refresh(store)
+        return store

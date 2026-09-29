@@ -888,19 +888,21 @@ async def _test_mode_view(user_id: int):
     sid = features.acting_owner_store(user_id)
     if sid is not None:
         store = await repo.get_store_by_id(sid)
-        role = f"do‘kon egasi — #{sid} {_escape(store.name) if store else '(o‘chirilgan)'}"
+        role = f"#{sid} {_escape(store.name) if store else '(o‘chirilgan)'} egasi"
+    elif on:
+        role = "«Test do‘kon» egasi (mijozlarga ko‘rinmaydi)"
     else:
-        role = "oddiy foydalanuvchi"
+        role = "—"
     lines = [
         "<b>Test rejimi</b>",
-        "Test rejimida yangi funksiyalarni o‘sha rolda turib sinaysiz. "
-        "Sinab ko‘rgach, «Hammaga chiqarish» tugmasini bosing.",
-        "",
-        f"Test rejimi: {'yoqilgan' if on else 'o‘chiq'}",
+        f"Holat: {'yoqilgan' if on else 'o‘chiq'}",
         f"Rolingiz: {role}",
         "",
-        "Do‘kon egasi bo‘lib sinash uchun: Do‘konlar ro‘yxati → do‘konni oching → "
-        "«Egasi sifatida sinash». So‘ng /dokonim yuboring.",
+        "Yoqilganda hech narsa sozlash shart emas:",
+        "• Do‘kon egasi sifatida: /dokonim yuboring.",
+        "• Mijoz sifatida: joylashuv yuboring — «Test do‘kon» ro‘yxatda birinchi "
+        "chiqadi (faqat sizga).",
+        "Sinab bo‘lgach, «Hammaga chiqarish» tugmasini bosing.",
         "",
     ]
     for name, stage in stages.values():
@@ -932,7 +934,7 @@ async def on_feature(callback: CallbackQuery, callback_data: FeatureCB) -> None:
         return
     if action == "user":
         await features.set_owner_role(uid, None)
-        await callback.answer("Oddiy foydalanuvchi roliga qaytdingiz")
+        await callback.answer("Test do‘koniga qaytdingiz")
     elif action == "me":
         await features.set_tester(uid, not features.is_tester(uid))
         await callback.answer("Test rejimi yoqildi" if features.is_tester(uid) else "Test rejimi o‘chirildi")

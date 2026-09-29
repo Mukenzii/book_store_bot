@@ -2,6 +2,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from bot import features
 from bot import repository as repo
 from bot.config import settings
 from bot.keyboards import request_location_kb, request_phone_kb, stores_list_kb
@@ -28,6 +29,13 @@ async def handle_location(message: Message, state: FSMContext) -> None:
     lon = message.location.longitude
 
     stores = await find_nearest_stores(lat, lon, settings.nearest_limit)
+    # Test mode: put the private test store first so the tester can check what
+    # customers will see. Real customers never get it (it's excluded above).
+    if features.is_tester(message.from_user.id):
+        test = await repo.get_or_create_test_store()
+        test_row = await repo.get_store(test.id, lat, lon)
+        if test_row:
+            stores = [test_row] + stores
 
     if not stores:
         await message.answer(

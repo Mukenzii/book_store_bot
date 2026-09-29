@@ -57,6 +57,9 @@ class Store(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     latitude: Mapped[float] = mapped_column(Float)
     longitude: Mapped[float] = mapped_column(Float)
+    # The private test-mode store: hidden from customers' search and the admin
+    # store list; testers are made its owner automatically.
+    is_test: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class Book(Base):

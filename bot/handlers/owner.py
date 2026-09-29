@@ -59,12 +59,15 @@ async def _show_panel(message: Message, store) -> None:
 
 
 async def _my_stores(user_id: int) -> list | None:
-    """Stores this user owns. A tester acting as a store's owner (test mode)
-    gets that store; everyone else is matched by phone. None = no phone yet."""
+    """Stores this user owns. In test mode you are automatically the owner of
+    the private test store (or of a store you picked via «Egasi sifatida
+    sinash»); everyone else is matched by phone. None = no phone yet."""
     sid = features.acting_owner_store(user_id)
     if sid is not None:
         store = await repo.get_store_by_id(sid)
         return [store] if store else []
+    if features.is_tester(user_id):
+        return [await repo.get_or_create_test_store()]
     user = await repo.get_user(user_id)
     if not (user and user.phone):
         return None

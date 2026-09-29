@@ -489,7 +489,7 @@ def test_mode_kb(
     )]]
     if acting_owner:
         rows.append([InlineKeyboardButton(
-            text="Foydalanuvchi roliga qaytish", callback_data=FeatureCB(action="user").pack(),
+            text="Test do‘koniga qaytish", callback_data=FeatureCB(action="user").pack(),
         )])
     for key, (name, stage) in stages.items():
         if stage == "test":
