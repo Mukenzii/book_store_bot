@@ -75,7 +75,8 @@ def _build_stores(rows: list[list[str]]) -> tuple[list[Store], int]:
                 address=region or None,
                 phone=_norm_phone(phone),
                 working_hours=None,
-                description=f"Agent: {agent}" if agent else None,
+                # The sheet's agent column is internal — never shown to customers.
+                description=None,
                 latitude=round(lat, 6),
                 longitude=round(lon, 6),
             )
