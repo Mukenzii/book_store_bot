@@ -31,7 +31,7 @@ async def handle_location(message: Message, state: FSMContext) -> None:
     stores = await find_nearest_stores(lat, lon, settings.nearest_limit)
     # Test mode: put the private test store first so the tester can check what
     # customers will see. Real customers never get it (it's excluded above).
-    if features.is_tester(message.from_user.id):
+    if features.in_test_env(message.from_user.id):
         test = await repo.get_or_create_test_store()
         test_row = await repo.get_store(test.id, lat, lon)
         if test_row:

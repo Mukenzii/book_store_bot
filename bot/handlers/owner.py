@@ -62,7 +62,7 @@ async def _my_stores(user_id: int) -> list | None:
     if sid is not None:
         store = await repo.get_store_by_id(sid)
         return [store] if store else []
-    if features.is_tester(user_id):
+    if features.in_test_env(user_id):
         return [await repo.get_or_create_test_store()]
     user = await repo.get_user(user_id)
     if not (user and user.phone):

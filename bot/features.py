@@ -59,6 +59,17 @@ def is_tester(user_id: int) -> bool:
     return user_id in _testers
 
 
+def any_in_test() -> bool:
+    """True while at least one feature is still being tested."""
+    return any(stage(k) == TEST for k in FEATURES)
+
+
+def in_test_env(user_id: int) -> bool:
+    """Tester AND something is still in testing. Once every feature is released
+    the test environment (Test do'kon etc.) disappears, even for testers."""
+    return user_id in _testers and any_in_test()
+
+
 def enabled(key: str, user_id: int) -> bool:
     if stage(key) == LIVE:
         return True
@@ -79,8 +90,9 @@ async def set_tester(user_id: int, on: bool) -> None:
 
 
 def acting_owner_store(user_id: int) -> int | None:
-    """Store id the tester is impersonating the owner of, or None."""
-    if user_id not in _testers:
+    """Store id the tester is impersonating the owner of, or None (also None
+    once nothing is left in testing)."""
+    if not in_test_env(user_id):
         return None
     role = _roles.get(user_id, "")
     if role.startswith("owner:") and role[6:].isdigit():
