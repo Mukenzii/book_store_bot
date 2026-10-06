@@ -8,6 +8,12 @@ from bot.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Idempotent GIN index for book-content retrieval (see bot/rag/retrieval.py).
+RAG_FTS_INDEX_SQL = (
+    "CREATE INDEX IF NOT EXISTS ix_book_chunks_search_fts ON book_chunks "
+    "USING GIN (to_tsvector('simple', search_text))"
+)
+
 engine = create_async_engine(settings.database_url, pool_pre_ping=True)
 
 session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -43,6 +49,8 @@ async def init_db(retries: int = 10, delay: float = 2.0) -> None:
                         "is_test BOOLEAN NOT NULL DEFAULT false"
                     )
                 )
+                # Full-text index over the script-normalised chunk text (RAG).
+                await conn.execute(text(RAG_FTS_INDEX_SQL))
                 # last_seen: add it NULLABLE first, then backfill from
                 # created_at. Adding it with `DEFAULT now()` would stamp every
                 # existing user with the deploy time, making all of them look

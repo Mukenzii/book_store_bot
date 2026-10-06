@@ -1,0 +1,81 @@
+{
+  "edition_key": "falaq.binafsha-shulasi-1.2026-08.revised.uz-latn",
+  "book_key": "falaq.binafsha-shulasi-1",
+  "catalog_title": "Binafsha shu'lasi (1-qism)",
+  "language": "uz-Latn",
+  "source_sha256": "6f45be4773c99024e386f06e8b73c6a6c690129f3dd2bec5eabbfdb68afd38a9",
+  "input_book_id": "falaq.binafsha-shulasi-1",
+  "input_edition_id": "falaq.binafsha-shulasi-1.2026-08.revised.uz-latn",
+  "expected_chunk_count": 127,
+  "narrative_sections": [
+    {
+      "pdf_page_start": 9,
+      "pdf_page_end": 54
+    },
+    {
+      "pdf_page_start": 55,
+      "pdf_page_end": 63
+    },
+    {
+      "pdf_page_start": 64,
+      "pdf_page_end": 86
+    },
+    {
+      "pdf_page_start": 87,
+      "pdf_page_end": 105
+    },
+    {
+      "pdf_page_start": 106,
+      "pdf_page_end": 123
+    },
+    {
+      "pdf_page_start": 124,
+      "pdf_page_end": 154
+    },
+    {
+      "pdf_page_start": 155,
+      "pdf_page_end": 169
+    },
+    {
+      "pdf_page_start": 170,
+      "pdf_page_end": 209
+    },
+    {
+      "pdf_page_start": 210,
+      "pdf_page_end": 239
+    },
+    {
+      "pdf_page_start": 240,
+      "pdf_page_end": 264
+    },
+    {
+      "pdf_page_start": 265,
+      "pdf_page_end": 293
+    },
+    {
+      "pdf_page_start": 294,
+      "pdf_page_end": 301
+    },
+    {
+      "pdf_page_start": 302,
+      "pdf_page_end": 314
+    },
+    {
+      "pdf_page_start": 315,
+      "pdf_page_end": 337
+    },
+    {
+      "pdf_page_start": 338,
+      "pdf_page_end": 350
+    },
+    {
+      "pdf_page_start": 351,
+      "pdf_page_end": 361
+    },
+    {
+      "pdf_page_start": 362,
+      "pdf_page_end": 374
+    }
+  ],
+  "genre": "fiction"
+}

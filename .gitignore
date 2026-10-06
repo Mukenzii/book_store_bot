@@ -9,3 +9,9 @@ venv/
 .claude/
 
 .DS_Store
+
+# Book content for RAG stays out of git (copyrighted full text).
+data/
+*.chunks.jsonl
+*.full.md
+*.validation.json

@@ -11,6 +11,8 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy import REAL, UniqueConstraint
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -165,3 +167,67 @@ class StoreBook(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class BookEdition(Base):
+    """One ingested edition of a book for content Q&A (RAG).
+
+    `edition_key` / `book_key` are our own stable IDs (the converter's IDs are
+    illustrative and are only kept as `source_edition_id`). `source_sha256`
+    identifies the exact PDF; `content_sha256` the ingested chunk payloads —
+    a re-import with the same content is a no-op, a changed one bumps
+    `content_version`. `enabled` gates serving answers from this edition.
+    """
+
+    __tablename__ = "book_editions"
+
+    edition_key: Mapped[str] = mapped_column(String(160), primary_key=True)
+    book_key: Mapped[str] = mapped_column(String(120), index=True)
+    # Title exactly as in our catalogue (books.title) — links content Q&A to it.
+    catalog_title: Mapped[str] = mapped_column(String(300))
+    source_title: Mapped[str] = mapped_column(String(300))
+    language: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source_edition_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    source_sha256: Mapped[str] = mapped_column(String(64))
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    content_version: Mapped[int] = mapped_column(Integer, default=1)
+    schema_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class BookChunk(Base):
+    """A retrievable passage of an edition. `text` is the source text, verbatim;
+    `search_text` is the derived Cyrillic/Latin-insensitive key that the
+    full-text index covers. `page_map` / `source_segments` are stored exactly as
+    supplied so citations can be resolved to a page per character offset."""
+
+    __tablename__ = "book_chunks"
+    __table_args__ = (UniqueConstraint("edition_key", "chunk_id", name="uq_book_chunks_edition_chunk"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    edition_key: Mapped[str] = mapped_column(String(160), index=True)
+    # Stable within an edition (the suffix of the converter's id, e.g. "c00012").
+    chunk_id: Mapped[str] = mapped_column(String(40))
+    source_chunk_id: Mapped[str] = mapped_column(String(240))
+    seq: Mapped[int] = mapped_column(Integer)
+    content_type: Mapped[str] = mapped_column(String(40))
+    text: Mapped[str] = mapped_column(Text)
+    search_text: Mapped[str] = mapped_column(Text)
+    text_sha256: Mapped[str] = mapped_column(String(64))
+    pdf_page_start: Mapped[int] = mapped_column(Integer)
+    pdf_page_end: Mapped[int] = mapped_column(Integer)
+    page_map: Mapped[list] = mapped_column(JSONB)
+    source_segments: Mapped[list] = mapped_column(JSONB)
+    # Optional vector for hybrid retrieval; NULL until a provider fills it.
+    embedding: Mapped[list[float] | None] = mapped_column(ARRAY(REAL), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # content_version of the edition when this chunk last changed.
+    content_version: Mapped[int] = mapped_column(Integer, default=1)

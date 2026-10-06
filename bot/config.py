@@ -55,6 +55,21 @@ class Settings(BaseSettings):
     # Cap on the model's answer length (tokens).
     ai_max_tokens: int = 1024
 
+    # --- Book-content Q&A (RAG over ingested editions, see bot/rag) ----------
+    # Embedding provider for hybrid retrieval: "none" (full-text only),
+    # "hashing" (free, local, deterministic) or "openai" (paid per call).
+    rag_embedding_provider: str = "none"
+    rag_openai_embedding_model: str = "text-embedding-3-small"
+    # Passages handed to the answer model per question.
+    rag_top_k: int = 5
+    # Public-bot limits: questions per user per day, question length, and how
+    # much verbatim book text one answer may show.
+    rag_daily_question_limit: int = 20
+    rag_max_question_chars: int = 500
+    rag_max_quote_chars: int = 160
+    rag_max_citations: int = 3
+    rag_max_verbatim_chars: int = 300
+
     @property
     def ai_enabled(self) -> bool:
         return bool(self.openai_api_key.strip())

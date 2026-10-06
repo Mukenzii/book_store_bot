@@ -20,6 +20,7 @@ LIVE = "live"
 # key -> human-readable name shown in the test-mode panel.
 FEATURES: dict[str, str] = {
     "store_books": "Do‘kon egalari kitoblari",
+    "book_qa": "Kitob mazmuni bo‘yicha savol-javob",
 }
 
 _TESTERS_KEY = "tester_ids"

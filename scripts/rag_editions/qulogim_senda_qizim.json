@@ -1,0 +1,10 @@
+{
+  "edition_key": "falaq.qulogim-senda-qizim.2026-10.uz-cyrl",
+  "book_key": "falaq.qulogim-senda-qizim",
+  "catalog_title": "Qulog‘im senda, qizim!",
+  "language": "uz-Cyrl",
+  "source_sha256": "dc06c5c08c187996df0b90ffacd22677ada42b3aae240e1f50b3b7cdc1a07b52",
+  "input_book_id": "example_book_qulogim_senda_qizim",
+  "input_edition_id": "example_edition_qulogim_senda_qizim_2026_10_uz_cyrl",
+  "expected_chunk_count": 233
+}
