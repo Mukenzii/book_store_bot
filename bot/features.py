@@ -21,6 +21,7 @@ LIVE = "live"
 FEATURES: dict[str, str] = {
     "store_books": "Do‘kon egalari kitoblari",
     "book_qa": "Kitob mazmuni bo‘yicha savol-javob",
+    "book_stores": "Kitob qaysi do‘konlarda bor",
 }
 
 _TESTERS_KEY = "tester_ids"

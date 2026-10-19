@@ -28,6 +28,20 @@ async def handle_location(message: Message, state: FSMContext) -> None:
     lat = message.location.latitude
     lon = message.location.longitude
 
+    # The user picked a book in 📚 Kitoblar and was asked for their location:
+    # show the nearest stores that have THAT book, then forget the choice.
+    book_id = (await state.get_data()).get("book_id")
+    if book_id and features.enabled("book_stores", message.from_user.id):
+        from bot.handlers.books import nearest_with_book, stores_text
+
+        book, stores = await nearest_with_book(message.from_user.id, lat, lon, book_id)
+        await state.set_state(StoreSearch.choosing_store)
+        await state.update_data(lat=lat, lon=lon, book_id=None)
+        await message.answer(
+            stores_text(book, stores), reply_markup=stores_list_kb(stores) if stores else None
+        )
+        return
+
     stores = await find_nearest_stores(lat, lon, settings.nearest_limit)
     # Test mode: put the private test store first so the tester can check what
     # customers will see. Real customers never get it (it's excluded above).
@@ -65,5 +79,5 @@ async def handle_unexpected_text(message: Message) -> None:
     """Any plain text that isn't a command — nudge the user to share location."""
     await message.answer(
         "Eng yaqin do‘konlarni topishim uchun joylashuvingizni yuboring 📍",
-        reply_markup=request_location_kb(),
+        reply_markup=request_location_kb(message.from_user.id),
     )

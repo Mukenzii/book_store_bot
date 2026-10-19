@@ -1,6 +1,6 @@
 from aiogram import Router
 
-from bot.handlers import admin, ai, owner, start, location, store
+from bot.handlers import admin, ai, books, owner, start, location, store
 
 
 def get_root_router() -> Router:
@@ -12,6 +12,9 @@ def get_root_router() -> Router:
     """
     router = Router()
     router.include_router(admin.router)
+    # books before owner/location: its menu button must not be taken as an
+    # owner's typed book title or as stray text.
+    router.include_router(books.router)
     router.include_router(ai.router)
     # owner before location so the owner's free-text book-adding state catches
     # input before the public 'share your location' text handler.

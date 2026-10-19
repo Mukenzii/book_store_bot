@@ -44,6 +44,7 @@ from bot.keyboards import (
     scheduled_confirm_delete_kb,
     scheduled_list_kb,
     scheduled_post_kb,
+    request_location_kb,
     test_mode_kb,
 )
 from bot import geo
@@ -930,6 +931,8 @@ async def on_feature(callback: CallbackQuery, callback_data: FeatureCB) -> None:
     elif action == "me":
         await features.set_tester(uid, not features.is_tester(uid))
         await callback.answer("Test rejimi yoqildi" if features.is_tester(uid) else "Test rejimi o‘chirildi")
+        # Show/hide test-only menu buttons (📚 Kitoblar) right away.
+        await callback.message.answer("Menyu yangilandi.", reply_markup=request_location_kb(uid))
     elif callback_data.key in features.FEATURES and action in (features.LIVE, features.TEST):
         await features.set_stage(callback_data.key, action)
         await callback.answer("Hammaga chiqarildi" if action == features.LIVE else "Testga qaytarildi")

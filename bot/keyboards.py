@@ -6,6 +6,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
+from bot import features
 from bot.models import ScheduledPost, Store
 from bot.repository import StoreWithDistance
 
@@ -88,19 +89,24 @@ PAGE_SIZE = 8
 # Reply-button captions matched by the AI-assistant handlers.
 AI_ENTER_TEXT = "🤖 AI yordamchi"
 AI_EXIT_TEXT = "⬅️ Orqaga"
+BOOKS_TEXT = "📚 Kitoblar"
 
 
-def request_location_kb() -> ReplyKeyboardMarkup:
-    """The main menu keyboard: 'share location' + 'AI assistant'.
+def request_location_kb(user_id: int | None = None) -> ReplyKeyboardMarkup:
+    """The main menu keyboard: 'share location' + 'AI assistant' (+ 'books'
+    for users who have the book_stores feature).
 
     one_time_keyboard=False so the buttons stay visible — the user can keep
     sending new locations (or open the assistant) without them disappearing.
     """
+    keyboard = [
+        [KeyboardButton(text="📍 Joylashuvni yuborish", request_location=True)],
+        [KeyboardButton(text=AI_ENTER_TEXT)],
+    ]
+    if user_id is not None and features.enabled("book_stores", user_id):
+        keyboard[1].append(KeyboardButton(text=BOOKS_TEXT))
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📍 Joylashuvni yuborish", request_location=True)],
-            [KeyboardButton(text=AI_ENTER_TEXT)],
-        ],
+        keyboard=keyboard,
         resize_keyboard=True,
         one_time_keyboard=False,
         is_persistent=True,
@@ -505,4 +511,35 @@ def store_books_kb(books: list) -> InlineKeyboardMarkup:
         )]
         for b in books
     ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# --- customer: which stores have a book ---------------------------------------
+
+class AvailBookPage(CallbackData, prefix="abp"):
+    offset: int
+
+
+class AvailBook(CallbackData, prefix="abk"):
+    book_id: int
+
+
+def available_books_kb(items: list, offset: int) -> InlineKeyboardMarkup:
+    """Books stocked by at least one store, PAGE_SIZE per page, with store counts."""
+    rows = [
+        [InlineKeyboardButton(
+            text=f"{book.title[:45]} · {n} do‘kon",
+            callback_data=AvailBook(book_id=book.id).pack(),
+        )]
+        for book, n in items[offset:offset + PAGE_SIZE]
+    ]
+    nav = []
+    if offset > 0:
+        nav.append(InlineKeyboardButton(
+            text="◀️", callback_data=AvailBookPage(offset=max(0, offset - PAGE_SIZE)).pack()))
+    if offset + PAGE_SIZE < len(items):
+        nav.append(InlineKeyboardButton(
+            text="▶️", callback_data=AvailBookPage(offset=offset + PAGE_SIZE).pack()))
+    if nav:
+        rows.append(nav)
     return InlineKeyboardMarkup(inline_keyboard=rows)

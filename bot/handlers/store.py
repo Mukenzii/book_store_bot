@@ -81,8 +81,14 @@ async def show_store_book(callback: CallbackQuery, callback_data: StoreBookView)
 
     # Catalogue books carry a cover and description; free-text ones don't.
     book = await get_book_by_id(sb.book_id) if sb.book_id else None
-    title = book.title if book else sb.title
-    author = book.author if book else sb.author
+    await send_book_card(callback.message, book, sb.title, sb.author)
+
+
+async def send_book_card(message, book, title: str = "", author: str | None = None) -> None:
+    """Cover + title/author/genre/publisher/pages + description (as a caption).
+    `book` is the catalogue Book, or None for a free-text store entry."""
+    title = book.title if book else title
+    author = book.author if book else author
 
     head = [f"<b>{escape(title)}</b>"]
     if author:
@@ -106,6 +112,6 @@ async def show_store_book(callback: CallbackQuery, callback_data: StoreBookView)
 
     image = BOOK_IMAGES_DIR / book.image if book and book.image else None
     if image and image.is_file():
-        await callback.message.answer_photo(FSInputFile(image), caption=text)
+        await message.answer_photo(FSInputFile(image), caption=text)
     else:
-        await callback.message.answer(text)
+        await message.answer(text)

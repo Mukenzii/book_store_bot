@@ -48,6 +48,28 @@ _NEAREST_SQL = text(
     """
 )
 
+# Same, limited to stores whose owners listed this catalogue book. The private
+# test store is included only for testers (:include_test).
+_NEAREST_WITH_BOOK_SQL = text(
+    """
+    SELECT
+        id, name, address, phone, working_hours, description,
+        latitude, longitude,
+        (6371 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+                cos(radians(:lat)) * cos(radians(latitude)) *
+                cos(radians(longitude) - radians(:lon)) +
+                sin(radians(:lat)) * sin(radians(latitude))
+            ))
+        )) AS distance_km
+    FROM stores
+    WHERE (NOT is_test OR :include_test)
+      AND id IN (SELECT store_id FROM store_books WHERE book_id = :book_id)
+    ORDER BY distance_km ASC
+    LIMIT :limit
+    """
+)
+
 _BY_ID_SQL = text(
     """
     SELECT
@@ -83,6 +105,15 @@ def _row_to_store(row) -> StoreWithDistance:
 async def find_nearest_stores(lat: float, lon: float, limit: int) -> list[StoreWithDistance]:
     async with session_factory() as session:
         result = await session.execute(_NEAREST_SQL, {"lat": lat, "lon": lon, "limit": limit})
+        return [_row_to_store(row) for row in result]
+
+
+async def find_nearest_stores_with_book(
+    lat: float, lon: float, limit: int, book_id: int, include_test: bool = False
+) -> list[StoreWithDistance]:
+    params = {"lat": lat, "lon": lon, "limit": limit, "book_id": book_id, "include_test": include_test}
+    async with session_factory() as session:
+        result = await session.execute(_NEAREST_WITH_BOOK_SQL, params)
         return [_row_to_store(row) for row in result]
 
 
@@ -634,3 +665,21 @@ async def get_or_create_test_store() -> Store:
             await session.commit()
             await session.refresh(store)
         return store
+
+
+async def books_in_stores(include_test: bool = False) -> list[tuple[Book, int]]:
+    """Catalogue books at least one store has listed, with how many stores."""
+    from sqlalchemy import func, select
+
+    stores = func.count(func.distinct(StoreBook.store_id)).label("stores")
+    stmt = (
+        select(Book, stores)
+        .join(StoreBook, StoreBook.book_id == Book.id)
+        .join(Store, Store.id == StoreBook.store_id)
+        .group_by(Book.id)
+        .order_by(Book.title)
+    )
+    if not include_test:
+        stmt = stmt.where(Store.is_test.is_(False))
+    async with session_factory() as session:
+        return [(book, n) for book, n in await session.execute(stmt)]

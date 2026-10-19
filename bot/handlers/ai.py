@@ -94,7 +94,7 @@ def _content_title(question, editions, previous):
 @router.message(F.text == AI_ENTER_TEXT)
 async def enter_ai(message: Message, state: FSMContext) -> None:
     if not settings.ai_enabled:
-        await message.answer(_DISABLED, reply_markup=request_location_kb())
+        await message.answer(_DISABLED, reply_markup=request_location_kb(message.from_user.id))
         return
     await state.clear()
     await state.set_state(AiChat.active)
@@ -105,7 +105,7 @@ async def enter_ai(message: Message, state: FSMContext) -> None:
 async def back_to_menu(message: Message, state: FSMContext) -> None:
     # User pressed "Back" — stop the agent and restore the main menu buttons.
     await state.clear()
-    await message.answer(_BACK, reply_markup=request_location_kb())
+    await message.answer(_BACK, reply_markup=request_location_kb(message.from_user.id))
 
 
 @router.message(AiChat.active, F.text & ~F.text.startswith("/"))
@@ -127,7 +127,7 @@ async def ask_ai(message: Message, state: FSMContext) -> None:
         res = await ai.answer_question(question, books)
         if res.find_store:
             await state.clear()
-            await message.answer(res.text, reply_markup=request_location_kb())
+            await message.answer(res.text, reply_markup=request_location_kb(message.from_user.id))
             return
         await _send_catalogue_reply(message, books, res.text)
         return
@@ -207,7 +207,7 @@ async def ask_ai(message: Message, state: FSMContext) -> None:
     # nearest-store flow) is available.
     if res.find_store:
         await state.clear()
-        await message.answer(escape(in_script(res.text, question)), reply_markup=request_location_kb())
+        await message.answer(escape(in_script(res.text, question)), reply_markup=request_location_kb(message.from_user.id))
         return
 
     reply = in_script(res.text, question)

@@ -57,7 +57,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     if user and user.phone:
         await message.answer(
             f"Xush kelibsiz, {message.from_user.first_name}!\n\n{WELCOME}",
-            reply_markup=request_location_kb(),
+            reply_markup=request_location_kb(message.from_user.id),
         )
         await _owner_hint(message, user.phone)
     else:
@@ -79,11 +79,11 @@ async def on_contact(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
         f"✅ Rahmat! Ro‘yxatdan o‘tdingiz.\n\n{WELCOME}",
-        reply_markup=request_location_kb(),
+        reply_markup=request_location_kb(message.from_user.id),
     )
     await _owner_hint(message, contact.phone_number)
 
 
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
-    await message.answer(HELP, reply_markup=request_location_kb())
+    await message.answer(HELP, reply_markup=request_location_kb(message.from_user.id))
