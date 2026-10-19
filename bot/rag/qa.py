@@ -21,7 +21,7 @@ from typing import Awaitable, Callable
 from bot.config import settings
 from bot import conversation
 from bot.rag import retrieval, scope
-from bot.rag.grounding import focused_sources
+from bot.rag.grounding import focused_sources, request_profile
 from bot.rag.language import answer_script, answer_language, in_script
 from bot.rag.citations import Citation, resolve
 from bot.rag.embeddings import EmbeddingProvider
@@ -205,7 +205,8 @@ async def openai_llm(messages: list[dict]) -> str:
     client = _get_client()
     if client is None:
         raise RuntimeError("AI is not configured")
-    resp = await client.chat.completions.create(
+    # Bound provider stalls so the handler can return its existing error reply.
+    resp = await client.with_options(timeout=45.0, max_retries=1).chat.completions.create(
         model=settings.ai_model,
         messages=messages,
         response_format={"type": "json_object"},
@@ -255,6 +256,9 @@ async def answer_book_question(
     if spoiler_request(question) or (resolved_question and spoiler_request(resolved_question)):
         return QAResult("spoiler_protected", spoiler_reply(question))
 
+    if history and resolved_question and not context_chunk_ids and re.match(r'^shu misol',search_key(question)):
+        return QAResult("abstained", _abstain_text(title, question))
+
     opening = any(scope.opening_requested(q) for q in (question, resolved_question, scope_question))
     pages = scope.opening_pages(edition) if opening else None
     if opening and pages is None:
@@ -273,10 +277,22 @@ async def answer_book_question(
             provider=provider, ignore_terms=title_terms, page_bounds=pages,
         )
         passages = retrieval.merge_rankings(passages, focused, k=settings.rag_top_k)
+    # A long question can contain an unsupported premise that overwhelms
+    # lexical coverage. Preserve recall for its named person and two original
+    # topic anchors; the full question remains authoritative for grounding.
+    subject=request_profile(retrieval_question,title)['subject']
+    anchors=[t for t in query_terms(retrieval_question) if t not in title_terms and t!=subject]
+    if subject and len(passages)<2 and len(anchors)>=2:
+        anchored=await retrieval.retrieve(session_factory,edition_key,' '.join([subject,*anchors[:2]]),k=settings.rag_top_k,provider=provider,ignore_terms=title_terms,page_bounds=pages)
+        passages=retrieval.merge_rankings(passages,anchored,k=settings.rag_top_k)
     if history and resolved_question and context_chunk_ids:
         previous_passages = await retrieval.context_passages(session_factory, edition_key, context_chunk_ids)
         previous_passages = scope.constrain(previous_passages, pages)
-        passages = retrieval.merge_rankings(passages, previous_passages, k=settings.rag_top_k)
+        referential = re.match(r'^(shu\b|shuni\b|shulardan\b|shu misol|nega u\b|bu fikr|bu misol)',search_key(question))
+        if previous_passages and referential:
+            passages = previous_passages
+        else:
+            passages = retrieval.merge_rankings(passages, previous_passages, k=settings.rag_top_k)
     passages = scope.constrain(passages, pages)
     if not passages:
         return QAResult("abstained", _abstain_text(title, question))

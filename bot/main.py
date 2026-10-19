@@ -90,7 +90,7 @@ async def _start_webhook(bot: Bot, dp: Dispatcher):
             await bot.set_webhook(
                 url=settings.full_webhook_url,
                 secret_token=settings.resolved_secret,
-                drop_pending_updates=True,
+                drop_pending_updates=False,
                 allowed_updates=dp.resolve_used_update_types(),
             )
             break
@@ -169,7 +169,7 @@ async def main() -> None:
         if runner is not None:
             await asyncio.Event().wait()  # serve until the process is stopped
         else:
-            await bot.delete_webhook(drop_pending_updates=True)
+            await bot.delete_webhook(drop_pending_updates=False)
             # This VPS's link to Telegram intermittently stalls. A shorter
             # long-poll window means a dead connection is detected and retried
             # in ~10s instead of ~25s, so the "no replies then a burst" dead

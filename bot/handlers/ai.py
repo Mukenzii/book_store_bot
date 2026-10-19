@@ -180,7 +180,8 @@ async def ask_ai(message: Message, state: FSMContext) -> None:
         title = res.book_question[0]
         await message.bot.send_chat_action(message.chat.id, "typing")
         same_book = title == previous["book_title"]
-        followup = not named and res.is_followup and bool(previous["history"]) and previous["book_title"] in (None, title)
+        context_reference = bool(re.search(r"^(?:shu\b|shuni\b|shulardan\b|nega u\b|bu fikr|bu misol|buni\b|bunga\b|uni\b|ular\b)", search_key(question)))
+        followup = not named and (res.is_followup or (same_book and context_reference)) and bool(previous["history"]) and previous["book_title"] in (None, title)
         resolved = res.book_question[1] if followup else ""
         result = await qa.answer_book_question(
             editions[title],

@@ -156,8 +156,9 @@ async def _fts(
             # vocabulary must exist in this book. It cannot admit a single
             # generic match for an otherwise unknown subject.
             backoff.append((covered, float(r.r), r))
-    if not scored:
-        scored = backoff
+    # Preserve qualified multi-anchor candidates even when another passage
+    # barely passes the stricter threshold; evidence validation still decides.
+    scored.extend(backoff)
     scored.sort(key=lambda x: (-x[0], -x[1]))
     return [
         Passage(r.chunk_id, r.text, r.content_type, r.page_map, r.source_segments,
